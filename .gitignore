@@ -1,0 +1,45 @@
+# ---- 依赖 / 构建产物 ----
+node_modules/
+node_modules
+dist/
+dist
+dist.old/
+
+# ---- 运行时数据与上传 ----
+uploads/
+server/data/*.db
+server/data/*.db-*
+server/data/*.db*
+server/data/*.sqlite
+server/data/*.sqlite3
+
+# ---- 截图 / 浏览器 profile（shots/ 约 267MB / 500+ 文件，绝不入库）----
+shots/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- 环境变量与密钥 ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!server/package-lock.json
+
+# ---- 评审临时文件 / DSH 运维锁 ----
+reviews/*.tmp
+reviews/**/*.tmp
+.dsh-ops-update-*.lock
+**/.dsh-ops-update-*.lock
+
+# ---- 系统垃圾 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*.tmp
+tmp/
+.cache/
+coverage/
