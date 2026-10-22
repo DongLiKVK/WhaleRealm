@@ -1,0 +1,39 @@
+# ---- 依赖 / 构建产物 ----
+node_modules/
+dist/
+dist.old/
+
+# ---- 运行时数据与上传 ----
+uploads/
+server/data/*.db
+server/data/*.db-*
+server/data/*.sqlite
+server/data/*.sqlite3
+
+# ---- 鲸鱼娘卡片素材（107 段 webm，不入库）----
+# 需要时把片段放进 whale/clips-rand；deploy/build.mjs 会整目录拷进 dist
+whale/clips-rand/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- 环境变量与密钥 ----
+.env
+.env.*
+!.env.example
+!server/.env.example
+*.pem
+*.key
+*.p12
+!server/package-lock.json
+
+# ---- 系统垃圾 ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*.tmp
+tmp/
+.cache/
+coverage/

@@ -1,0 +1,1215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>鲸鱼娘 · 互动卡片 v3.3（登录卡内嵌）</title>
+<script>
+  /* 内嵌模式：?embed=1 → 卡片铺满 iframe，外框/阴影/圆角交给宿主（鲸域登录页左卡）。
+     ?title= / ?sub= 覆盖文字块标题与副标（第三方授权页、手机号认证页复用同一张卡）。 */
+  (function(){ try{ var q = new URLSearchParams(location.search); if(q.get('embed') === '1'){ document.documentElement.classList.add('embed'); if(q.get('bare') === '1') document.documentElement.classList.add('bare'); } }catch(e){} })();
+</script>
+<style>
+  :root{
+    --deep:#04101f; --mid:#0a2440; --blue:#2f6fd0; --ice:#7fd3ff; --pink:#ffb7d5;
+    --ink:#eaf4ff; --dim:#8fb4d8;
+    --tiltX:0deg; --tiltY:0deg;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; display:grid; place-items:center; min-height:100vh;
+    background:radial-gradient(1200px 700px at 50% -10%, #12406e 0%, #071a30 45%, #030b16 100%);
+    font-family:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:var(--ink); -webkit-font-smoothing:antialiased; padding:28px;
+  }
+  /* ---------- 卡片外框 ---------- */
+  .card{
+    position:relative; width:420px; height:580px; border-radius:16px; overflow:hidden;
+    /* 底色 = 鲸域登录页左侧卡 .auth-visual 的 155deg 深海三段渐变（#0c2d4a → #12456e → #0a2136） */
+    background:linear-gradient(155deg,#0c2d4a 0%,#12456e 46%,#0a2136 100%);
+    box-shadow:0 40px 80px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(127,211,255,.16) inset,
+               0 1px 0 rgba(255,255,255,.08) inset;
+    transform:perspective(900px) rotateX(var(--tiltX)) rotateY(var(--tiltY));
+    transform-style:preserve-3d;
+    transition:transform .18s ease-out, box-shadow .3s ease;
+    touch-action:none; user-select:none; cursor:grab; outline:none;
+    will-change:transform;
+  }
+  .card:focus-visible{box-shadow:0 0 0 2px var(--ice), 0 40px 80px -30px rgba(0,0,0,.9)}
+  .card.grabbing{cursor:grabbing}
+  .card.hovered{box-shadow:0 46px 90px -28px rgba(0,0,0,.95), 0 0 0 1px rgba(127,211,255,.3) inset,
+                0 0 46px -12px rgba(79,160,255,.55)}
+
+  /* ---------- 背景层 ---------- */
+  #sea{position:absolute; inset:0; width:100%; height:100%; display:block; opacity:.55; z-index:1}
+  /* ---------- 深海装饰（取自登录页 .auth-visual 的 .av-sea，尺寸按 420×580 重算） ---------- */
+  .av-sea{position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; border-radius:inherit}
+  .av-glow{
+    position:absolute; left:-12%; top:-28%; width:78%; height:78%; border-radius:50%;
+    background:radial-gradient(circle at 40% 40%,rgba(120,200,255,.40),rgba(120,200,255,0) 68%);
+    filter:blur(2px);
+  }
+  .av-ray{position:absolute; top:-30%; width:110px; height:170%; left:34%;
+    background:linear-gradient(180deg,rgba(190,232,255,.26),rgba(190,232,255,0));
+    transform:rotate(14deg); filter:blur(6px)}
+  .av-ray.r2{left:62%; width:58px; transform:rotate(-9deg); opacity:.72}
+  .av-tail{position:absolute; right:-8%; bottom:26%; width:66%; opacity:.42; color:#08233c}
+  .av-tail svg{display:block; width:100%; height:auto}
+  .av-bub{position:absolute; border-radius:50%; border:1px solid rgba(190,232,255,.5);
+    background:radial-gradient(circle at 32% 30%,rgba(255,255,255,.55),rgba(255,255,255,.05))}
+  .av-bub.b1{width:15px;height:15px;left:14%;bottom:52%}
+  .av-bub.b2{width:8px;height:8px;left:26%;bottom:63%}
+  .av-bub.b3{width:20px;height:20px;right:16%;top:16%}
+  .spot{
+    position:absolute; width:340px; height:340px; border-radius:50%; pointer-events:none;
+    left:var(--mx,50%); top:var(--my,40%); transform:translate(-50%,-50%);
+    background:radial-gradient(circle,rgba(127,211,255,.22),rgba(127,211,255,0) 62%);
+    opacity:0; transition:opacity .3s ease; mix-blend-mode:screen;
+  }
+  .card.hovered .spot{opacity:1}
+
+  /* ---------- 角色（视频 / 静态回退） ---------- */
+  .dock{
+    /* 从卡顶往下排，高度由 JS 按「文字块正文顶部」算（--dockH）：角色永远在文字之上，不压字 */
+    position:absolute; left:50%; top:0; width:100%; height:var(--dockH,380px);
+    /* --sx/--sy 是拖拽时的弹性形变（拉伸 + 正交方向压扁，体积守恒）。支点取脚底中点：
+       横向围绕角色中线伸缩，纵向从脚下往上长高 —— 观感是被拎着甩，不是原地放大。 */
+    transform-origin:50% 100%;
+    transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1));
+    display:grid; place-items:end center; z-index:3;
+    /* 拖拽每帧改 --dx/--dy：提前升到合成层，避免逐帧重排导致的黏滞感。
+       注意别给它加 transition —— 指针位移和过渡叠加会变成「橡皮筋拖尾」。 */
+    will-change:transform;
+  }
+  .char{
+    position:absolute; bottom:0; height:min(95%,344px); width:auto; max-width:88%;
+    filter:drop-shadow(0 18px 22px rgba(0,0,0,.55)) saturate(1) brightness(1);
+    transition:opacity .16s linear, transform .35s cubic-bezier(.22,1.2,.36,1), filter .3s ease;
+    transform-origin:50% 92%;
+    pointer-events:none; -webkit-user-drag:none;
+  }
+  /* 静态立绘是降级内容：默认不在 DOM 里（见 <div class="dock"> 里的说明）。
+     下面这几条只在 setStatic() 把它插进来之后才起作用。 */
+  .char.pic{animation:float 3.8s ease-in-out infinite}
+  .char.pic.side,.char.pic.mature{opacity:0}
+  .char.mature.pic{height:min(86%,442px)}
+  .card[data-mode="mature"] .char.pic.front{opacity:0}
+  .card[data-mode="mature"] .char.pic.mature{opacity:1}
+  .char.vid{opacity:0; transition:opacity .18s linear}
+  .char.vid.on{opacity:1}
+  /* 视频模式下必须把静态立绘彻底拿掉，否则它在透明处透出来 = 两个人影叠在一起 */
+  .card.video-mode .char.pic{opacity:0; visibility:hidden; animation:none}
+  video.char{padding:0; margin:0; background:transparent; object-fit:cover; object-position:50% 50%}
+  /* 池里唯一没有 alpha 的片段（被落叶淹没_HD，3840×2160 纯黑底）。
+     黑底没法靠 mix-blend-mode 溶掉：.char 上的 filter 会建立隔离层，blend 只和透明层混合。
+     改成软边蒙版：把矩形边界渐隐进卡片，观感是「一圈暗场」而不是一块黑方块。 */
+  video.char.noalpha{
+    filter:none;
+    -webkit-mask-image:radial-gradient(ellipse 64% 64% at 50% 52%, #000 56%, rgba(0,0,0,.5) 80%, transparent 97%);
+    mask-image:radial-gradient(ellipse 64% 64% at 50% 52%, #000 56%, rgba(0,0,0,.5) 80%, transparent 97%);
+  }
+  .card.hovered .char{filter:drop-shadow(0 20px 26px rgba(0,0,0,.6)) saturate(1.08) brightness(1.05)}
+  /* 拖拽期间把角色自身的过渡掐掉：.char 的 transform 过渡（.35s）会跟指针位移叠加，
+     表现为「跟手慢半拍 + 松手回弹过冲」。 */
+  .card.dragging .char{transition:opacity .16s linear, filter .3s ease}
+  @keyframes float{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-8px) rotate(.6deg)}}
+
+  .shadow{
+    /* 影子跟着角色走：--dx/--dy 是 JS 写的拖拽位移，v24 起角色能横跨整张扁头图，
+       影子还钉在卡片中心就会与本体脱节 */
+    position:absolute; bottom:calc(100% - var(--dockH,380px) + var(--dy,0px));
+    left:calc(50% + var(--dx,0px)); width:210px; height:26px; border-radius:50%;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,.55), rgba(0,0,0,0) 70%);
+    transform:translateX(-50%) scale(1); transition:transform .18s ease, opacity .18s ease;
+    filter:blur(2px); z-index:2;
+  }
+  .card.dragging .shadow{transform:translateX(-50%) scale(.7); opacity:.55}
+
+  /* 关键帧必须带上拖拽位移 —— animation 会整条覆盖 .dock 的 transform，
+     v24 起角色能横跨整张扁头图、默认还停在右侧，动画期间若不补 translate(var(--dx),var(--dy))
+     本体会瞬移回卡片中心再弹回来（拖到最左时最刺眼）。
+     位移放在 scale / rotate 之前，缩放与摇摆都只在原位发生。 */
+  .card.poke .dock{animation:squash .52s cubic-bezier(.3,1.6,.4,1)}
+  @keyframes squash{
+    0%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) scale(1,1)}
+    22%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) scale(1.09,.9) translateY(8px)}
+    52%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) scale(.95,1.07) translateY(-12px)}
+    78%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) scale(1.02,.98)}
+    100%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) scale(1,1)}
+  }
+  .card.dizzy .dock{animation:wobble .28s ease-in-out 4}
+  @keyframes wobble{0%,100%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) rotate(-9deg)}50%{transform:translateX(-50%) translate(var(--dx,0px),var(--dy,0px)) scale(var(--sx,1),var(--sy,1)) rotate(9deg)}}
+
+  /* ---------- 气泡台词 ---------- */
+  .speech{
+    position:absolute; left:50%; top:26px; transform:translate(-50%,6px) scale(.94);
+    max-width:280px; padding:9px 14px; border-radius:14px; z-index:5;
+    background:rgba(9,32,56,.86); border:1px solid rgba(127,211,255,.35);
+    color:#eaf4ff; font-size:13px; line-height:1.5; text-align:center;
+    box-shadow:0 12px 26px -12px rgba(0,0,0,.8), 0 0 24px -14px rgba(127,211,255,.8);
+    opacity:0; pointer-events:none; transition:opacity .22s ease, transform .22s cubic-bezier(.22,1.2,.36,1);
+    backdrop-filter:blur(6px);
+  }
+  .speech::after{
+    content:""; position:absolute; left:50%; bottom:-6px; width:12px; height:12px; margin-left:-6px;
+    background:inherit; border-right:1px solid rgba(127,211,255,.35); border-bottom:1px solid rgba(127,211,255,.35);
+    transform:rotate(45deg);
+  }
+  .speech.on{opacity:1; transform:translate(-50%,0) scale(1)}
+
+  /* ---------- 登录卡文字块：内容 1:1 来自 #/login 左侧 .auth-visual ----------
+     层级：装饰(1) < 角色(3) < 进度条(5) < 粒子(6) < 文字(7)。文字永远压在动画之上。 */
+  .copy{
+    position:absolute; left:0; right:0; bottom:0; z-index:7; pointer-events:none;
+    padding:68px 22px 24px; color:#eaf5ff;
+    /* 文字必须始终可读：底部实色 + 中段加厚，比纯渐变多压一层，角色下半身自然沉进暗场 */
+    background:linear-gradient(180deg,rgba(5,19,33,0) 0%,rgba(5,19,33,.58) 26%,rgba(5,19,33,.90) 54%,rgba(5,19,33,.965) 78%,rgba(5,19,33,.975) 100%);
+  }
+  .copy h2{
+    margin:0; font-size:19px; line-height:1.3; letter-spacing:.4px; font-weight:700;
+    color:#f2f9ff; text-shadow:0 2px 10px rgba(0,10,20,.75);
+  }
+  .copy p{margin:6px 0 0; font-size:12px; line-height:1.62; color:#b7d6ee; text-shadow:0 1px 8px rgba(0,10,20,.6)}
+  .copy ul{list-style:none; margin:11px 0 0; padding:0; display:flex; flex-direction:column; gap:7px}
+  .copy li{font-size:11px; line-height:1.46; color:#a9cbe4; padding-left:13px; position:relative; text-shadow:0 1px 8px rgba(0,10,20,.55)}
+  .copy li::before{content:"◆"; position:absolute; left:0; top:0; font-size:8px; color:#63b8ff}
+  .copy li b{display:block; font-size:11.5px; color:#eaf5ff; margin-bottom:1px}
+  .copy .status{margin-top:10px; font-size:10px; color:#8fb4d8; letter-spacing:.3px}
+  .copy .status .dot{color:#9ff0c9; margin-right:4px}
+  .copy .status.off .dot{color:#ffcf8f}
+  .counter{
+    position:absolute; right:18px; top:64px; z-index:4; font-size:11px; color:var(--dim);
+    padding:5px 9px; border-radius:999px; border:1px solid rgba(127,211,255,.2);
+    background:rgba(6,22,40,.6); pointer-events:none
+  }
+  .counter b{color:var(--ice); font-size:12.5px; font-variant-numeric:tabular-nums}
+  .logo{position:absolute; right:18px; top:16px; width:40px; height:40px; z-index:4;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,.5)); opacity:.9; animation:float 5s ease-in-out infinite}
+
+
+  /* ---------- 片段进度条：一次性表演播到哪了（播完才解锁切换） ---------- */
+  .cprog{position:absolute; left:18px; right:18px; bottom:9px; height:2px; border-radius:2px;
+    background:rgba(127,211,255,.16); opacity:0; transition:opacity .25s ease; overflow:hidden; z-index:8; pointer-events:none}
+  .cprog.on{opacity:1}
+  .cprog i{display:block; height:100%; width:0; border-radius:2px;
+    background:linear-gradient(90deg,#8fdcff,#dcf7ff); transition:width .12s linear}
+
+  /* ---------- 粒子 ---------- */
+  .fx{position:absolute; inset:0; pointer-events:none; z-index:6; overflow:hidden}
+  .p{position:absolute; will-change:transform,opacity; pointer-events:none}
+  .p.heart{font-size:15px; animation:up 1.05s cubic-bezier(.2,.7,.3,1) forwards}
+  .p.bub{width:var(--s); height:var(--s); border-radius:50%;
+    background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.95), rgba(127,211,255,.55) 45%, rgba(127,211,255,.08) 72%);
+    border:1px solid rgba(190,235,255,.6); animation:up 1.35s cubic-bezier(.2,.7,.3,1) forwards}
+  .p.star{font-size:16px; animation:orbit .9s ease-out forwards}
+  .p.ring{width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%;
+    border:2px solid rgba(127,211,255,.85); animation:ring .62s ease-out forwards}
+  @keyframes up{
+    0%{opacity:1; transform:translate(0,0) scale(.6)}
+    70%{opacity:.95}
+    100%{opacity:0; transform:translate(var(--tx),var(--ty)) scale(1.15)}
+  }
+  @keyframes ring{0%{opacity:.9; transform:scale(.4)}100%{opacity:0; transform:scale(5.5)}}
+  @keyframes orbit{0%{opacity:1; transform:rotate(0) translateX(16px) scale(1)}
+    100%{opacity:0; transform:rotate(240deg) translateX(46px) scale(.5)}}
+
+.grabring{position:absolute; inset:auto 0 calc(100% - var(--dockH,380px)) 0; margin:auto; width:250px; height:250px; border-radius:50%;
+    border:1px dashed rgba(127,211,255,.28); opacity:0; transition:opacity .25s ease; z-index:1; pointer-events:none}
+  .card.hovered .grabring{opacity:.85; animation:spin 22s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media (max-width:460px){
+    .card{width:min(92vw,420px); height:min(132vw,580px)}
+    .dock{width:80%}
+    .char{height:min(95%,300px)}
+    .copy{padding:58px 16px 22px}
+    .copy h2{font-size:17px}
+    .copy p{font-size:11.5px; line-height:1.55}
+    .copy ul{margin-top:9px; gap:6px}
+    .copy li{font-size:10.5px; line-height:1.45; padding-left:12px}
+    .copy li b{font-size:11px}
+    .copy .status{font-size:9.5px; margin-top:8px}
+  }
+  /* ---------- 内嵌模式（鲸域登录页左卡）----------
+     iframe 尺寸就是卡片尺寸：去掉外边距/阴影/圆角（宿主 .auth-visual 负责裁切），
+     关掉 3D 倾斜（铺满时旋转会露出四角），隐藏玩具计数器、调试状态行、进度条与角标。 */
+  html.embed,html.embed body{background:transparent}
+  html.embed body{padding:0; display:block; min-height:0}
+  html.embed .card{
+    width:100%; height:100%; max-width:none; min-height:0;
+    border-radius:0; box-shadow:none; transform:none!important;
+    cursor:default; will-change:auto;
+  }
+  html.embed .card.hovered{box-shadow:none}
+  html.embed .counter,html.embed .cprog,html.embed .logo,html.embed .copy .status{display:none}
+  html.embed .copy{padding-top:74px}
+  /* 内嵌矮卡（手机 320 高）：文字块只留 h2 + 副标，收窄上内边距，角色区才不会被挤没 */
+  html.embed .card.compact .copy{padding-top:44px}
+  html.embed .card.compact .copy ul{display:none}
+  /* v26：内嵌登录页左卡也允许拖角色了 —— touch-action 不能是 none，否则手指在卡面上滑动
+     会被这条规则吃掉，外层登录页根本滚不动（实测：卡外可滚 347px，卡上为 0）。
+     pan-y pinch-zoom：竖直滑动仍旧交还宿主滚动（滚动链不断），横向手势浏览器不认领，
+     pointermove 正常派发到卡片 —— 于是触屏也能横着把鱼拖走。 */
+  html.embed .card{touch-action:pan-y pinch-zoom}
+  /* 鱼身自己是拖拽把手（.char 全局是 pointer-events:none，这里覆盖回来）：
+     命中区收在角色盒上，光标 grab；touch-action 与卡片同级用 pan-y pinch-zoom ——
+     手机上手指多半落在鱼身上，若这里写 none，竖向滑动既滚不动页面也只会把鱼拽来拽去，
+     登录页会多出一块「滑动死区」。现在：竖向手势仍归宿主滚动，横向手势才归拖拽。
+     未就绪的空视频盒不算把手。 */
+  html.embed .char{pointer-events:auto; touch-action:pan-y pinch-zoom; cursor:grab}
+  html.embed .char.vid:not(.on){pointer-events:none}
+  html.embed .card.dragging .char,html.embed .card.grabbing .char{cursor:grabbing}
+  html.embed .grabring{display:none}
+  html.embed .speech{top:18px}
+  /* ---------- 内嵌「纯立绘」模式（?embed=1&bare=1）----------
+     首页 hero / 鲸鲸空间 hero 用：卡面上只留动画 + 最下面那行动态立绘文字，
+     标题/副标/三条说明不显示（页面自己有文案），进度条留着因为它是动画节拍的一部分。 */
+  /* 铺满头图后卡面很扁，状态行居中放：左右两侧分别留给宿主的账号行 / 发布按钮，互不压字 */
+  html.embed.bare .copy{padding:0 14px 9px; text-align:center;
+    background:linear-gradient(180deg,rgba(5,19,33,0) 0%,rgba(5,19,33,.55) 100%)}
+  html.embed.bare .copy h2,
+  html.embed.bare .copy p,
+  html.embed.bare .copy ul{display:none}
+  html.embed.bare .copy .status{display:block; margin:0; font-size:10px; opacity:.88;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* 嵌进窄条（首页手机档 116px）时状态行只能单行截断，缩字号别折成三行 */
+  @media (max-width:170px){
+    html.embed.bare .copy .status{font-size:9px; letter-spacing:0}
+  }
+  /* 扁头图里底部一整条都是宿主的地盘（账号行 / 发布键），进度条压到最下沿那 3px */
+  html.embed.bare .cprog{display:block; left:14px; right:14px; bottom:3px}
+  /* 角色能横跨整张头图之后，气泡还钉在卡面正中就会跟本体脱节（人在最左、气泡在中间）。
+     跟着 --dx/--dy 走，上边用 max() 钳住别跑出卡外。 */
+  html.embed.bare .speech{ left:calc(50% + var(--dx,0px)); top:max(3px, calc(14px + var(--dy,0px)));
+    max-width:min(260px, 62%) }
+  /* 66% 宽的鲸尾影按 420×580 的竖卡算的，铺到 732×208 会变成一块横着的大暗斑 */
+  html.embed.bare .av-tail{display:none}
+  html.embed.bare .speech{top:14px}
+
+  @media (prefers-reduced-motion:reduce){
+    .char.pic,.rays,.logo,.grabring{animation:none!important}
+    .card{transition:none}
+    #sea{opacity:.55}
+    .char.vid{transition:none}
+  }
+</style>
+</head>
+<body>
+<main class="card" id="card" tabindex="0" role="button"
+      aria-label="鲸鱼娘互动卡片：点击摸摸、按住拖拽、双击换一个随机动作">
+  <canvas id="sea" aria-hidden="true"></canvas>
+  <div class="av-sea" aria-hidden="true">
+    <span class="av-glow"></span><span class="av-ray r1"></span><span class="av-ray r2"></span>
+    <span class="av-tail"><svg viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g transform="rotate(9 32 32)"><path d="M27.1 57.8 C27.3 57.4 28.1 56.2 28.6 55.4 C29.0 54.6 29.4 53.9 29.8 52.9 C30.1 52.0 30.3 51.5 30.8 49.9 C31.2 48.3 32.1 44.8 32.5 43.4 C32.9 42.0 33.0 42.1 33.3 41.6 C33.6 41.0 33.9 40.6 34.2 40.2 C34.6 39.7 35.0 39.3 35.4 39.0 C35.9 38.6 35.1 38.8 36.8 38.0 C38.6 37.3 44.0 35.4 46.0 34.5 C48.0 33.6 48.1 33.4 49.0 32.8 C50.0 32.1 50.7 31.6 51.6 30.8 C52.6 29.9 53.7 28.8 54.6 27.8 C55.4 26.7 56.1 25.7 56.7 24.6 C57.3 23.6 57.8 22.2 58.1 21.5 C58.3 20.7 58.3 20.6 58.3 20.2 C58.3 19.9 58.3 19.5 58.2 19.2 C58.1 19.0 58.0 18.8 57.9 18.7 C57.7 18.5 58.2 18.4 57.1 18.4 C56.1 18.4 53.7 19.0 51.6 18.9 C49.5 18.8 46.2 18.1 44.6 17.9 C42.9 17.7 42.6 17.7 41.6 17.8 C40.6 17.8 40.0 17.8 38.6 18.1 C37.3 18.4 34.8 19.4 33.7 19.7 C32.7 20.0 32.7 19.8 32.3 19.7 C31.8 19.6 31.8 19.6 31.2 19.1 C30.5 18.5 29.2 17.1 28.4 16.4 C27.7 15.8 27.3 15.5 26.5 15.1 C25.8 14.7 25.3 14.4 23.9 13.9 C22.5 13.4 19.5 12.7 18.0 12.3 C16.6 11.8 16.2 11.6 15.3 11.2 C14.5 10.7 13.8 10.4 12.9 9.6 C12.0 8.9 10.5 7.4 9.7 6.8 C9.0 6.3 8.7 6.3 8.4 6.2 C8.0 6.1 7.8 6.2 7.5 6.4 C7.2 6.6 6.9 6.9 6.6 7.3 C6.4 7.7 6.2 8.1 6.1 8.7 C5.9 9.3 5.8 10.0 5.7 10.7 C5.7 11.4 5.7 12.3 5.7 13.1 C5.8 14.0 5.9 15.0 6.0 15.8 C6.1 16.6 6.3 17.3 6.5 18.1 C6.7 18.9 6.9 19.5 7.4 20.5 C7.8 21.5 8.6 23.0 9.3 24.1 C10.1 25.3 11.0 26.4 11.9 27.4 C12.7 28.4 13.2 28.9 14.5 30.0 C15.7 31.0 18.3 32.9 19.4 33.8 C20.5 34.7 20.6 34.8 21.0 35.4 C21.5 36.0 21.9 36.7 22.1 37.4 C22.4 38.0 22.5 38.6 22.5 39.3 C22.6 39.9 22.5 40.5 22.4 41.2 C22.3 41.9 22.1 42.7 21.8 43.4 C21.5 44.2 21.1 45.0 20.7 45.8 C20.3 46.6 19.8 47.3 19.3 48.0 C18.8 48.8 18.2 49.5 17.6 50.1 C17.0 50.8 16.8 51.1 15.6 52.0 C14.5 53.0 11.5 55.2 10.6 55.8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg></span>
+    <span class="av-bub b1"></span><span class="av-bub b2"></span><span class="av-bub b3"></span>
+  </div>
+  <div class="spot" aria-hidden="true"></div>
+  <div class="grabring" aria-hidden="true"></div>
+
+  <img class="logo" src="assets/whale-girl-logo-dynamic.png" alt="" aria-hidden="true" draggable="false">
+  <div class="counter">被摸 <b id="n">0</b> 次</div>
+
+  <div class="dock" id="dock">
+    <!-- 两道静态 Q 版立绘（pose-front / pose-mature）故意不写在这里：它们一进 DOM 就立刻画出来，
+         等视频首帧就绪再被视频顶掉 —— 那一下就是每次刷新都会看到的「Q 版图闪现」。
+         现在只作为降级内容存在：initVideo 判定这台设备放不了视频时，由 setStatic() 按需注入。 -->
+    <video class="char vid" id="vidA" muted playsinline preload="none" aria-hidden="true" disablepictureinpicture disableremoteplayback controlslist="nodownload noremoteplayback"></video>
+    <video class="char vid" id="vidB" muted playsinline preload="none" aria-hidden="true" disablepictureinpicture disableremoteplayback controlslist="nodownload noremoteplayback"></video>
+  </div>
+  <div class="shadow" aria-hidden="true"></div>
+
+  <div class="speech" id="speech" role="status" aria-live="polite"></div>
+
+  <div class="copy">
+    <h2>回到鲸域</h2>
+    <p>插件、日志与社群都在这里等你。一个账号，一台设备，一条会话。</p>
+    <ul>
+      <li><b>单账号单会话</b>同一时间只有一条有效会话，换个设备登录要显式顶替</li>
+      <li><b>登录后锁定</b>会话建立后不能在本浏览器内换号，换号请先退出</li>
+      <li><b>手机号认证</b>登录只是进门，认证过才算完整账号</li>
+    </ul>
+    <div class="status" id="csub">双击换动作 · 待机</div>
+  </div>
+
+  <div class="cprog" id="cprog" aria-hidden="true"><i></i></div>
+  <div class="fx" id="fx" aria-hidden="true"></div>
+</main>
+<script>
+(function(){
+  'use strict';
+  var card   = document.getElementById('card');
+  var dock   = document.getElementById('dock');
+  var fx     = document.getElementById('fx');
+  var speech = document.getElementById('speech');
+  var nEl    = document.getElementById('n');
+  var csub   = document.getElementById('csub');   /* 登录卡文字块里的状态行 */
+  var sea    = document.getElementById('sea');
+  var vidA   = document.getElementById('vidA');
+  var vidB   = document.getElementById('vidB');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var saveData = !!(navigator.connection && navigator.connection.saveData);
+
+  /* ================= 内嵌模式（被鲸域登录页当左侧卡片用） ================= */
+  var QS = new URLSearchParams(location.search);
+  var EMBED = QS.get('embed') === '1';
+  /* bare：纯立绘形态，卡面不承载任何说明文字（首页/鲸鲸空间 hero 用） */
+  var BARE = EMBED && QS.get('bare') === '1';
+
+  /* ================= 随机素材池：whale/clips-rand 下的 webm 片段（全量 107 段） ================= */
+  /* 全部 640×360 / VP9+alpha / 10s 一次性片段；每次播放从池里等概率随机取一个，不去重、不轮播、不按顺序。
+     a:0 表示该片段没有 alpha 通道（被落叶淹没_HD，3840×2160 黑底），播放时用 screen 混合把黑底吃掉。 */
+  var POOL = [
+    { id:'c001', f:'clips-rand/被落叶淹没_HD.webm', label:'被落叶淹没_HD', a:0 },
+    { id:'c002', f:'clips-rand/被落叶淹没.webm', label:'被落叶淹没' },
+    { id:'c003', f:'clips-rand/被鼠标拖拽悬空反馈.webm', label:'被鼠标拖拽悬空反馈' },
+    { id:'c004', f:'clips-rand/被吓一跳.webm', label:'被吓一跳' },
+    { id:'c005', f:'clips-rand/变鸽子.webm', label:'变鸽子' },
+    { id:'c006', f:'clips-rand/插茱萸赏菊.webm', label:'插茱萸赏菊' },
+    { id:'c007', f:'clips-rand/拆礼物.webm', label:'拆礼物' },
+    { id:'c008', f:'clips-rand/超大伸懒腰.webm', label:'超大伸懒腰' },
+    { id:'c009', f:'clips-rand/晨间刷牙.webm', label:'晨间刷牙' },
+    { id:'c010', f:'clips-rand/吃白饭.webm', label:'吃白饭' },
+    { id:'c011', f:'clips-rand/吃冰淇淋融化.webm', label:'吃冰淇淋融化' },
+    { id:'c012', f:'clips-rand/吃大闸蟹.webm', label:'吃大闸蟹' },
+    { id:'c013', f:'clips-rand/吃饺子.webm', label:'吃饺子' },
+    { id:'c014', f:'clips-rand/吃腊八粥.webm', label:'吃腊八粥' },
+    { id:'c015', f:'clips-rand/吃年糕.webm', label:'吃年糕' },
+    { id:'c016', f:'clips-rand/吃青团.webm', label:'吃青团' },
+    { id:'c017', f:'clips-rand/吃汤圆.webm', label:'吃汤圆' },
+    { id:'c018', f:'clips-rand/吃糖葫芦.webm', label:'吃糖葫芦' },
+    { id:'c019', f:'clips-rand/吃晚餐.webm', label:'吃晚餐' },
+    { id:'c020', f:'clips-rand/吃午餐.webm', label:'吃午餐' },
+    { id:'c021', f:'clips-rand/吃西瓜.webm', label:'吃西瓜' },
+    { id:'c022', f:'clips-rand/吃早餐.webm', label:'吃早餐' },
+    { id:'c023', f:'clips-rand/吃长寿面.webm', label:'吃长寿面' },
+    { id:'c024', f:'clips-rand/吃重阳糕.webm', label:'吃重阳糕' },
+    { id:'c025', f:'clips-rand/吃粽子.webm', label:'吃粽子' },
+    { id:'c026', f:'clips-rand/吃Token.webm', label:'吃Token' },
+    { id:'c027', f:'clips-rand/抽陀螺.webm', label:'抽陀螺' },
+    { id:'c028', f:'clips-rand/穿针乞巧.webm', label:'穿针乞巧' },
+    { id:'c029', f:'clips-rand/吹笛子.webm', label:'吹笛子' },
+    { id:'c030', f:'clips-rand/吹气球.webm', label:'吹气球' },
+    { id:'c031', f:'clips-rand/打瞌睡被惊醒.webm', label:'打瞌睡被惊醒' },
+    { id:'c032', f:'clips-rand/大口吃零食.webm', label:'大口吃零食' },
+    { id:'c033', f:'clips-rand/待机呼吸休闲.webm', label:'待机呼吸休闲' },
+    { id:'c034', f:'clips-rand/荡秋千.webm', label:'荡秋千' },
+    { id:'c035', f:'clips-rand/点击回应-傲娇生气.webm', label:'点击回应-傲娇生气' },
+    { id:'c036', f:'clips-rand/点击回应-害羞惊讶.webm', label:'点击回应-害羞惊讶' },
+    { id:'c037', f:'clips-rand/点击回应-开心跃动.webm', label:'点击回应-开心跃动' },
+    { id:'c038', f:'clips-rand/点击回应-挠痒咯咯笑.webm', label:'点击回应-挠痒咯咯笑' },
+    { id:'c039', f:'clips-rand/点击回应-元气挥手.webm', label:'点击回应-元气挥手' },
+    { id:'c040', f:'clips-rand/东张西望.webm', label:'东张西望' },
+    { id:'c041', f:'clips-rand/动物环绕.webm', label:'动物环绕' },
+    { id:'c042', f:'clips-rand/堆雪人.webm', label:'堆雪人' },
+    { id:'c043', f:'clips-rand/放风筝.webm', label:'放风筝' },
+    { id:'c044', f:'clips-rand/放河灯.webm', label:'放河灯' },
+    { id:'c045', f:'clips-rand/放孔明灯.webm', label:'放孔明灯' },
+    { id:'c046', f:'clips-rand/放烟花.webm', label:'放烟花' },
+    { id:'c047', f:'clips-rand/工作状态-垂头叹气冒汗.webm', label:'工作状态-垂头叹气冒汗' },
+    { id:'c048', f:'clips-rand/工作状态-忙碌点按.webm', label:'工作状态-忙碌点按' },
+    { id:'c049', f:'clips-rand/工作状态-清点归档.webm', label:'工作状态-清点归档' },
+    { id:'c050', f:'clips-rand/工作状态-雀跃庆祝.webm', label:'工作状态-雀跃庆祝' },
+    { id:'c051', f:'clips-rand/工作状态-思考冒泡.webm', label:'工作状态-思考冒泡' },
+    { id:'c052', f:'clips-rand/工作状态-原地踱步张望.webm', label:'工作状态-原地踱步张望' },
+    { id:'c053', f:'clips-rand/哈欠连天.webm', label:'哈欠连天' },
+    { id:'c054', f:'clips-rand/蝴蝶蜜蜂环绕头顶开花.webm', label:'蝴蝶蜜蜂环绕头顶开花' },
+    { id:'c055', f:'clips-rand/鲸鱼吐泡泡特效.webm', label:'鲸鱼吐泡泡特效' },
+    { id:'c056', f:'clips-rand/可爱宅舞.webm', label:'可爱宅舞' },
+    { id:'c057', f:'clips-rand/蓝鲸现世.webm', label:'蓝鲸现世' },
+    { id:'c058', f:'clips-rand/撸猫.webm', label:'撸猫' },
+    { id:'c059', f:'clips-rand/萌化小幽灵.webm', label:'萌化小幽灵' },
+    { id:'c060', f:'clips-rand/女仆屈膝礼仪.webm', label:'女仆屈膝礼仪' },
+    { id:'c061', f:'clips-rand/螃蟹走路.webm', label:'螃蟹走路' },
+    { id:'c062', f:'clips-rand/凭空生花.webm', label:'凭空生花' },
+    { id:'c063', f:'clips-rand/扑克魔术.webm', label:'扑克魔术' },
+    { id:'c064', f:'clips-rand/骑木马.webm', label:'骑木马' },
+    { id:'c065', f:'clips-rand/轻快记录.webm', label:'轻快记录' },
+    { id:'c066', f:'clips-rand/轻快摇摆舞.webm', label:'轻快摇摆舞' },
+    { id:'c067', f:'clips-rand/三球抛接.webm', label:'三球抛接' },
+    { id:'c068', f:'clips-rand/深度思考碎碎念.webm', label:'深度思考碎碎念' },
+    { id:'c069', f:'clips-rand/是啊，吃什么.webm', label:'是啊，吃什么' },
+    { id:'c070', f:'clips-rand/收红包.webm', label:'收红包' },
+    { id:'c071', f:'clips-rand/涮火锅.webm', label:'涮火锅' },
+    { id:'c072', f:'clips-rand/碎碎念-擦桌碎碎念.webm', label:'碎碎念-擦桌碎碎念' },
+    { id:'c073', f:'clips-rand/碎碎念-对屏碎碎念.webm', label:'碎碎念-对屏碎碎念' },
+    { id:'c074', f:'clips-rand/碎碎念-发呆碎碎念.webm', label:'碎碎念-发呆碎碎念' },
+    { id:'c075', f:'clips-rand/讨糖南瓜灯.webm', label:'讨糖南瓜灯' },
+    { id:'c076', f:'clips-rand/踢毽子.webm', label:'踢毽子' },
+    { id:'c077', f:'clips-rand/偷吃零食被抓住.webm', label:'偷吃零食被抓住' },
+    { id:'c078', f:'clips-rand/玩水枪.webm', label:'玩水枪' },
+    { id:'c079', f:'clips-rand/玩游戏气急败坏.webm', label:'玩游戏气急败坏' },
+    { id:'c080', f:'clips-rand/舞狮头.webm', label:'舞狮头' },
+    { id:'c081', f:'clips-rand/下五子棋.webm', label:'下五子棋' },
+    { id:'c082', f:'clips-rand/小幅度原地360度旋转展示.webm', label:'小幅度原地360度旋转展示' },
+    { id:'c083', f:'clips-rand/小提琴演奏.webm', label:'小提琴演奏' },
+    { id:'c084', f:'clips-rand/写代码.webm', label:'写代码' },
+    { id:'c085', f:'clips-rand/写福字.webm', label:'写福字' },
+    { id:'c086', f:'clips-rand/摇扇纳凉.webm', label:'摇扇纳凉' },
+    { id:'c087', f:'clips-rand/用鲸鱼尾巴拍打地面.webm', label:'用鲸鱼尾巴拍打地面' },
+    { id:'c088', f:'clips-rand/优雅女仆舞.webm', label:'优雅女仆舞' },
+    { id:'c089', f:'clips-rand/悠闲哼歌.webm', label:'悠闲哼歌' },
+    { id:'c090', f:'clips-rand/余额-袋空如洗.webm', label:'余额-袋空如洗' },
+    { id:'c091', f:'clips-rand/余额-分文不剩.webm', label:'余额-分文不剩' },
+    { id:'c092', f:'clips-rand/余额-金袋叮当.webm', label:'余额-金袋叮当' },
+    { id:'c093', f:'clips-rand/余额-钱袋满溢.webm', label:'余额-钱袋满溢' },
+    { id:'c094', f:'clips-rand/余额-钱袋如常.webm', label:'余额-钱袋如常' },
+    { id:'c095', f:'clips-rand/余额-数金皱眉.webm', label:'余额-数金皱眉' },
+    { id:'c096', f:'clips-rand/原地蹲下玩玩具汽车.webm', label:'原地蹲下玩玩具汽车' },
+    { id:'c097', f:'clips-rand/原地漂浮踏步.webm', label:'原地漂浮踏步' },
+    { id:'c098', f:'clips-rand/原地敲击桌面互动.webm', label:'原地敲击桌面互动' },
+    { id:'c099', f:'clips-rand/原地跳跃抓碎头顶物品.webm', label:'原地跳跃抓碎头顶物品' },
+    { id:'c100', f:'clips-rand/原地小憩沉眠.webm', label:'原地小憩沉眠' },
+    { id:'c101', f:'clips-rand/原地重力下蹲压缩.webm', label:'原地重力下蹲压缩' },
+    { id:'c102', f:'clips-rand/原地专心玩魔方.webm', label:'原地专心玩魔方' },
+    { id:'c103', f:'clips-rand/原地左转奔跑.webm', label:'原地左转奔跑' },
+    { id:'c104', f:'clips-rand/照镜子.webm', label:'照镜子' },
+    { id:'c105', f:'clips-rand/整体换装试色.webm', label:'整体换装试色' },
+    { id:'c106', f:'clips-rand/中秋赏月吃月饼.webm', label:'中秋赏月吃月饼' },
+    { id:'c107', f:'clips-rand/装点圣诞树.webm', label:'装点圣诞树' }
+  ];
+  var POOL_BY_ID = {};
+  for(var pi = 0; pi < POOL.length; pi++) POOL_BY_ID[POOL[pi].id] = POOL[pi];
+
+  /* 纯随机：每次都重新掷骰子，允许连续抽到同一段（按要求不做去重） */
+  function randomClip(){ return POOL[(Math.random() * POOL.length) | 0].id; }
+  /* 透明通道探测专用：必须抽带 alpha 的片段。c001 是 3840×2160 纯黑底、没有 alpha,
+     拿它去探测会判成「浏览器不支持透明视频」，整张卡直接退化成静态立绘 */
+  function randomAlphaClip(){
+    var c = [];
+    for(var i = 0; i < POOL.length; i++){ if(POOL[i].a !== 0) c.push(POOL[i].id); }
+    return c[(Math.random() * c.length) | 0];
+  }
+  function clipOf(id){ return POOL_BY_ID[id] || POOL[0]; }
+
+  /* 台词按事件分类（片段是随机抽的，台词不再跟片段绑定） */
+  var LINES = {
+    hover : ['在的，怎么啦？','水里有点凉…','要摸摸头吗？','今天的泡泡很圆吧'],
+    poke  : ['嗯？','唔…','又来啦？','这段是随机挑的哦','看完这段还有下一段','要不要再看一个？'],
+    drag  : ['唔…要带我去哪？','抓头发是不对的！','飘飘的…有点晕','轻一点啦'],
+    fling : ['哇——！','晕了晕了…','海底转了三圈'],
+    home  : ['还是这里舒服','回来了～','海流把我送回来了'],
+    tenth : ['第十次了，你是不是很闲？','数到十，奖励一个泡泡'],
+    swap  : ['换一个','这个也没看过吧','接着来'],
+    mature: ['换了个样子']
+  };
+  var n = 0, said = '', sayT = 0;
+  function say(text, ms){
+    if(!text) return;
+    speech.textContent = text;
+    speech.classList.add('on');
+    clearTimeout(sayT);
+    sayT = setTimeout(function(){ speech.classList.remove('on'); }, ms || 1900);
+  }
+  function pick(arr, avoid){
+    var v = arr[(Math.random()*arr.length)|0];
+    return v === avoid && arr.length > 1 ? pick(arr, avoid) : v;
+  }
+
+  /* ================= 动态立绘：双 video 交叉淡入 + 「播完才切」锁 ================= */
+  var vids = [vidA, vidB], vi = 0, vidOk = false, cur = '', dragging = false;
+  var hovered = false;
+  var busy = false;               /* 台上有一段片子在循环（不是加载锁：双击可以随时打断） */
+  var want = '';                  /* 正在加载/上台的目标片段（防止快速连点时旧加载反超新请求） */
+  var cprog = document.getElementById('cprog');
+  var cprogFill = cprog ? cprog.firstElementChild : null;
+
+  function playing(){ return vidOk && busy; }
+
+  var MODE = '静态立绘 · 检测中';
+  function label(id){
+    if(!vidOk){ csub.textContent = MODE; return; }
+    csub.textContent = MODE + ' · 双击换 · ' + clipOf(id).label;
+  }
+
+  /* 播放态同步到片段进度条 */
+  function syncQueueUI(){
+    if(cprog) cprog.classList.toggle('on', !!vidOk && !!cur);
+    if(cprogFill && !busy) cprogFill.style.width = '0%';
+  }
+
+  /* 切片段：先把新片段的首帧取到就绪，再交叉淡入；就绪之前旧片段继续演，不会出现空白/残帧。
+     双击即调用本函数，可以打断任何正在播的片段（加载中也一样：want 变了旧回调就作废）。 */
+  function switchTo(id, c){
+    var next = vids[vi ^ 1], prev = vids[vi], mine = id;
+    want = id;
+    busy = true;                   /* 从发起切换这一刻就锁住：加载窗口期也不能被插队 */
+    var start = function(){
+      if(want !== mine || !vidOk) return;
+      next.loop = true;            /* 双击才换片：当前这段循环播，不会播完停在最后一帧 */
+      try { next.currentTime = 0; } catch(e){}
+      var p = next.play();
+      if(p && p.catch) p.catch(function(){});
+      next.classList.add('on');
+      next.classList.toggle('noalpha', c.a === 0);
+      prev.classList.remove('on');
+      setTimeout(function(){ if(!prev.classList.contains('on')){ try{ prev.pause(); }catch(e){} } }, 260);
+      vi ^= 1; cur = id;
+      busy = true;                 /* 台上有片子在循环 */
+      label(id);
+      syncQueueUI();
+    };
+    if(next.dataset.clip === id && next.readyState >= 2){ start(); return; }
+    next.dataset.clip = id;
+    next.src = c.f;
+    try { next.load(); } catch(e){}
+    var done = false, t = 0;
+    var go = function(){
+      if(done) return;
+      done = true;
+      clearTimeout(t);
+      next.removeEventListener('loadeddata', go);
+      start();
+    };
+    next.addEventListener('loadeddata', go);
+    t = setTimeout(go, 2500);      /* 兜底：极端网络下也先上台，不让界面卡死 */
+  }
+
+  /* 播放指定片段（调试/测试用）；随时可切，正在播的就地打断 */
+  function play(id){
+    if(!vidOk || !POOL_BY_ID[id]) return false;
+    switchTo(id, clipOf(id));
+    return true;
+  }
+
+  /* 唯一换片入口：掷一次骰子并立刻切过去。
+     每次调用都是新的随机结果 —— 不去重、不排队、不等上一段播完（换片权只属于用户的双击）。 */
+  function playRandom(){
+    if(!vidOk) return false;
+    var id = randomClip();
+    switchTo(id, clipOf(id));
+    return true;
+  }
+
+  /* 兜底：个别解码器/移动端内联播放在 loop=true 下仍可能抛一次 ended。
+     这里把同一段从头再放，绝不自动换片 —— 换片只由双击（或等同的键盘回车）决定。 */
+  vids.forEach(function(v){
+    v.addEventListener('ended', function(){
+      if(v.dataset.clip !== cur) return;
+      try { v.currentTime = 0; } catch(e){}
+      var p = v.play();
+      if(p && p.catch) p.catch(function(){});
+    });
+  });
+
+  /* 透明通道探测：把一帧缩到 64×64 采样，看有多少像素是「全透明」。
+     不能只看最大 alpha —— 只要有一个像素不透明就会判否；也不能只看有没有透明像素 —— 纯黑底也会被判成透明。
+     判据：至少 5% 的采样像素 alpha < 16 才算解码器真的给出了 alpha 通道。 */
+  function hasAlpha(v, cb){
+    try{
+      var N = 64, c = document.createElement('canvas'); c.width = N; c.height = N;
+      var g = c.getContext('2d', { willReadFrequently: true });
+      g.clearRect(0, 0, N, N);
+      g.drawImage(v, 0, 0, N, N);
+      var d = g.getImageData(0, 0, N, N).data, clear = 0, total = 0;
+      for(var i = 3; i < d.length; i += 4){ total++; if(d[i] < 16) clear++; }
+      cb(total > 0 && clear / total > 0.05);
+    }catch(e){
+      /* file:// 下 canvas 被标记为 tainted，读不到像素：不能据此判否，按支持处理 */
+      cb(true);
+    }
+  }
+
+  /* 两道静态 Q 版立绘：默认不在 DOM 里，避免刷新瞬间先画出来再被视频顶掉（那一下就是「闪现」）。
+     只有走到 setStatic() 这条降级路径（降低动效 / 省流量 / 浏览器不支持透明视频 / 片段加载超时）才插进来。 */
+  var STATIC_PICS = [
+    { cls:'front',  src:'assets/pose-front.webp',  alt:'Q 版鲸鱼娘' },
+    { cls:'mature', src:'assets/pose-mature.webp', alt:'鲸鱼娘（成熟形态）' }
+  ];
+  function addStaticPics(){
+    if(!dock || dock.querySelector('.char.pic')) return;
+    STATIC_PICS.forEach(function(p){
+      var im = document.createElement('img');
+      im.className = 'char pic ' + p.cls;
+      im.src = p.src;
+      im.alt = p.alt;
+      im.draggable = false;
+      im.decoding = 'async';
+      /* 插在 video 前面：视频 z 序更高，将来万一两者同时在，视频仍然压住静态图 */
+      dock.insertBefore(im, vidA);
+    });
+  }
+
+  function setStatic(why){
+    vidOk = false;
+    card.classList.add('static-mode');
+    card.classList.remove('video-mode');
+    card.removeAttribute('data-mode');
+    vidA.classList.remove('on'); vidB.classList.remove('on');
+    addStaticPics();
+    MODE = '静态立绘 · ' + why;
+    label(POOL[0].id);
+    measureBounds(); clampPos(); applyPos();
+  }
+
+  function initVideo(){
+    if(reduce){ setStatic('已按系统设置降低动效'); return; }
+    if(saveData){ setStatic('已开启省流量模式'); return; }
+    var first = clipOf(randomAlphaClip());
+    var probe = vidA;
+    probe.loop = true;
+    probe.dataset.clip = first.id;
+    probe.src = first.f;
+    /* preload="none" 时浏览器不会自动取数据：必须主动 play() 才会加载首帧，否则永远等不到 loadeddata */
+    var kick = probe.play();
+    if(kick && kick.catch) kick.catch(function(){});
+    var guard = setTimeout(function(){
+      if(!vidOk && MODE.indexOf('检测中') >= 0) setStatic('片段加载超时');
+    }, 4000);
+    probe.addEventListener('loadeddata', function onData(){
+      probe.removeEventListener('loadeddata', onData);
+      clearTimeout(guard);
+      hasAlpha(probe, function(ok){
+        if(!ok){ setStatic('当前浏览器不支持透明视频'); return; }
+        vidOk = true;
+        card.classList.add('video-mode');
+        probe.classList.add('on');
+        probe.classList.toggle('noalpha', first.a === 0);
+        cur = first.id; vi = 0;
+        probe.play().catch(function(){});
+        MODE = '动态立绘 · WebM α';
+        label(first.id);
+        busy = true;             /* 开屏这段已在台上（循环播出，等双击换片） */
+        syncQueueUI();           /* 开屏这段也要点亮片段进度条 */
+        measureBounds(); clampPos(); applyPos();   /* 角色真的上台了，按它的实际高度重算上/下边界 */
+      });
+    });
+    probe.addEventListener('error', function(){ setStatic('片段加载失败'); });
+  }
+
+  function warm(){
+    /* 池子 107 段共 60MB，不整体预取：随机热身 4 段，让第一次切换不至于干等 */
+    for(var i = 0; i < 4; i++){
+      (function(id, k){
+        setTimeout(function(){
+          fetch(clipOf(id).f).then(function(r){ return r.arrayBuffer(); }).catch(function(){});
+        }, 400 + k * 260);
+      })(randomAlphaClip(), i);
+    }
+  }
+
+  function centerPoint(){
+    var r = card.getBoundingClientRect();
+    return { clientX: r.left + r.width/2, clientY: r.top + r.height*0.55 };
+  }
+
+  /* ================= 海水气泡（canvas） ================= */
+  var ctx = sea.getContext('2d');
+  var W = 0, H = 0, dpr = Math.min(devicePixelRatio || 1, 2);
+  var bubbles = [], energy = 1;
+
+  /* 角色区高度 = 文字块正文（h2）顶部再往上 8px；文字块高度随宽度重排，所以每次 resize 都要重算 */
+  var copyEl = document.querySelector('.copy');
+  var copyTitle = copyEl ? copyEl.querySelector('h2') : null;
+  /* 内嵌时由宿主指定标题/副标：登录＝「回到鲸域」，第三方授权、手机号认证各有各的文案，
+     所以不能把文案写死在卡里（默认值仍是登录页原文）。 */
+  if(EMBED && copyEl){
+    var qTitle = QS.get('title'), qSub = QS.get('sub'), qP = copyEl.querySelector('p');
+    if(qTitle && copyTitle) copyTitle.textContent = qTitle;
+    if(qSub && qP) qP.textContent = qSub;
+  }
+  function layoutDock(){
+    if(!copyEl) return;
+    /* 内嵌到登录页时卡片可能很矮（手机 320 / 平板 420）：矮卡收起 ul 三条，给角色让出高度。
+       对应鲸域原设计：`.auth-visual` 窄屏本就隐藏 `.av-list`。 */
+    if(EMBED) card.classList.toggle('compact', card.clientHeight < 390);
+    /* 纯立绘模式：没有标题要避让，角色区一路给到卡底，只留底部那一行状态文字 */
+    if(BARE){
+      var stEl = copyEl.querySelector('.status');
+      var stH = (stEl ? stEl.offsetHeight : 14) + 20;
+      card.style.setProperty('--dockH', Math.max(120, card.clientHeight - stH) + 'px');
+      return;
+    }
+    if(!copyTitle) return;
+    var limit = copyEl.offsetTop + copyTitle.offsetTop - 8;
+    /* 留出文字块本身，避免极端窄高屏把角色挤没；compact 时文字块只有 h2+副标，可以多给角色 48px */
+    var max = card.clientHeight - (card.classList.contains('compact') ? 72 : 120);
+    limit = Math.max(150, Math.min(max, limit));
+    card.style.setProperty('--dockH', Math.round(limit) + 'px');
+  }
+
+  function resize(){
+    W = card.clientWidth; H = card.clientHeight;
+    sea.width = W * dpr; sea.height = H * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    bubbles = [];
+    var count = Math.round((W * H) / 5200);
+    for(var i=0;i<count;i++) bubbles.push(newBubble(true));
+    layoutDock();
+    measureBounds();
+    clampPos();
+    applyPos();
+  }
+  function newBubble(anywhere){
+    var s = 1.2 + Math.random()*4.2;
+    return {
+      x: Math.random()*W, y: anywhere ? Math.random()*H : H + 10, r: s,
+      vy: 0.18 + Math.random()*0.5, sway: Math.random()*Math.PI*2,
+      swaySpd: 0.006 + Math.random()*0.012, amp: 0.25 + Math.random()*0.9,
+      a: 0.10 + Math.random()*0.35
+    };
+  }
+  function tick(){
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<bubbles.length;i++){
+      var b = bubbles[i];
+      b.y -= b.vy * energy;
+      b.sway += b.swaySpd * (0.6 + energy*0.5);
+      b.x += Math.sin(b.sway) * b.amp * 0.5;
+      if(b.y < -12){ bubbles[i] = newBubble(false); continue; }
+      ctx.globalAlpha = b.a;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.2832);
+      ctx.strokeStyle = 'rgba(190,235,255,.9)'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.fillStyle = 'rgba(160,220,255,.10)'; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if(busy && cprogFill){
+      var act = vids[vi], dur = (act && act.duration) || 0;
+      if(dur > 0) cprogFill.style.width = Math.min(100, act.currentTime / dur * 100).toFixed(1) + '%';
+    }
+    if(energy > 1) energy += (1 - energy) * 0.03;
+    raf = requestAnimationFrame(tick);
+  }
+
+  /* ================= 粒子 ================= */
+  function spawn(kind, x, y, opt){
+    var el = document.createElement('div');
+    el.className = 'p ' + kind;
+    var o = opt || {};
+    if(kind === 'heart') el.textContent = o.ch || '💙';
+    if(kind === 'star')  el.textContent = o.ch || '✨';
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    if(kind === 'bub') el.style.setProperty('--s', (6 + Math.random()*12).toFixed(1) + 'px');
+    var ang = (o.ang != null ? o.ang : Math.random()*Math.PI*2);
+    var dist = 40 + Math.random()*90;
+    el.style.setProperty('--tx', (Math.cos(ang)*dist).toFixed(0) + 'px');
+    el.style.setProperty('--ty', (-40 - Math.random()*110).toFixed(0) + 'px');
+    if(kind === 'heart') el.style.animationDelay = (Math.random()*0.12) + 's';
+    fx.appendChild(el);
+    setTimeout(function(){ el.remove(); }, 1500);
+  }
+  function burst(x, y, k){
+    var i, N = k || 9;
+    for(i=0;i<3;i++) spawn('bub', x + (Math.random()-.5)*26, y + (Math.random()-.5)*26);
+    for(i=0;i<N;i++) spawn('heart', x, y, { ch: Math.random() < .28 ? '🫧' : '💙' });
+    var ring = document.createElement('div');
+    ring.className = 'p ring';
+    ring.style.left = x + 'px'; ring.style.top = y + 'px';
+    fx.appendChild(ring);
+    setTimeout(function(){ ring.remove(); }, 700);
+  }
+  function stars(x, y){
+    for(var i=0;i<6;i++) spawn('star', x, y, { ang: i * 1.05 });
+  }
+
+  /* ================= 拖拽 / 弹簧 ================= */
+  /* bx/by = 按下那一刻的 pos：拖拽是「基准 + 位移」，不是把位移直接当成绝对位置 ——
+     后者会让角色在按下并越过阈值的瞬间从默认站位瞬移到指针处。 */
+  var drag = { active:false, sx:0, sy:0, bx:0, by:0, pdx:0, pdy:0, tx:0, ty:0, lx:0, ly:0, lt:0, vx:0, vy:0 };
+  var rafDrag = 0;   /* pointermove 的样式写入合并到一帧一次 */
+  var pos = { x:0, y:0, vx:0, vy:0 };
+  var HOME = { x:0, y:0 };
+  /* 拖拽边界：登录卡里左右按固定余量 110（半个身子探出卡片就够），
+     铺满头图（bare）时改成按卡宽实时算——右边界=默认站位，左边界=本体贴到卡片最左边缘。
+     上下仍按角色实际占位算：上能顶到卡片顶边、下能落到卡片底边。 */
+  var BOUND = { left:110, right:110, up:96, down:88 };
+  var placed = false;   /* 用户亲手拖过之后，默认站位就跟着走，不再把角色弹回内侧 */
+  var HEAD_TOP = 0.139;  /* 本体顶端在画面高度上的位置：canvas 逐像素测的 alpha bbox（50/360） */
+  var HEADROOM = 0.22;   /* 视频画面顶部自带的透明留白（角色头顶到画面上沿约 16%）。拖拽上限要把这段也吃掉，
+                            否则盒子贴到卡顶时画面里的角色还差几十像素，手感就是「顶不上去」。 */
+  var moving = false, raf2 = 0;
+
+  /* ---------- 弹性形变（squash & stretch，v26） ----------
+     拖拽时角色不是刚性跟随：指针落在 target，pos 每帧只走差值的一部分（LAG），
+     那段「还差多少」就是被拉长的量。松手后弹簧把这个量带回 0（恢复初始形态），
+     欠阻尼让它在 0 附近过冲两下 —— 那就是回弹。 */
+  var LAG = 0.5;                      /* 跟随延迟：每帧只补差值的一半 ≈ 落后指针一帧 */
+  var JELL_MAX = 0.18;                /* 形变上限 ±18%，再大就像橡皮泥不像活物 */
+  var JELL_K = 0.10, JELL_C = 0.30;   /* 形变弹簧常数：阻尼比≈0.47，过冲约两成，两下就收住 */
+  var jell = { s:0, v:0, t:0, ax:1, t0:0 };   /* s 当前形变 / v 速度 / t 本帧目标 / ax 1=横向 0=纵向 */
+
+  /* 用 offsetTop/offsetHeight 而不是 getBoundingClientRect：
+     卡片本身有 rotateX/rotateY 的 3D 倾斜，rect 是投影后的，会随时变。 */
+  function measureBounds(){
+    var dockEl = document.getElementById('dock');
+    /* 静态立绘默认不在 DOM 里，量视频盒子就够：opacity 不影响 offsetWidth/Height，
+       视频还没 src 时高度也来自同一条 CSS（.char），量与立绘完全一致。 */
+    var el = document.querySelector('video.char.on') ||
+             document.querySelector('video.char') ||
+             document.querySelector('.char.pic.front') ||
+             document.querySelector('.char.pic');
+    if(!dockEl || !el || !el.offsetHeight){
+      BOUND.up = 96; BOUND.down = 88;           /* 探测期兜底 */
+      /* 探测期量不到角色盒宽：按卡宽给一个保守余量（22%），真正手感交给下一次 measureBounds */
+      if(!BARE){ BOUND.left = BOUND.right = Math.max(56, Math.round(card.clientWidth * 0.22)); }
+      return BOUND;
+    }
+    var M = 6;                                   /* 与卡片边缘留 6px，别贴死 */
+    var top = el.offsetTop + dockEl.offsetTop;   /* 角色基线位置（不含 --dx/--dy） */
+    var h = el.offsetHeight;
+    var w = el.offsetWidth;
+    var bottom = top + h;
+    /* 上边界 = 到卡顶的空隙 + 画面留白，让可见的角色本体刚好抵到卡顶（再往上被卡片裁掉） */
+    BOUND.up   = BARE
+      /* bare：画面里本体顶端在高度 13.9% 处（640×360 实测 alpha bbox y=50..330），
+         按它算都不早不晚地抵到卡顶；沿用 16% 的旧公式会把脑袋切掉 7px。 */
+      ? Math.max(0, Math.round(top + h * HEAD_TOP - 1))
+      : Math.max(0, Math.round(top - M + h * HEADROOM));
+    BOUND.down = Math.max(0, Math.round(card.clientHeight - bottom - M));
+    if(BARE){
+      /* 扁宽的头图（732×208）：角色默认站在右边，往左一路拖到卡片最左边缘。
+         视频画面左右各带一段透明留白（本体大约在中间 56% 宽里），
+         抵边时把这段 side 也吃掉，可见的本体才真的贴到边上；
+         画面本身允许被卡片裁掉——那是「贴死边缘」的视觉证据。 */
+      var side = Math.round(w * 0.22);
+      var span = Math.max(0, Math.round((card.clientWidth - w) / 2));
+      BOUND.left  = span + side;
+      /* 右边界与左对称：抵右时画面同样越过卡右缘 side，可见的本体才真的贴到右边。
+         v24 曾写成 span*0.32 + side（实测 134），比默认站位还小 —— 于是默认就被钳在
+         右边界上，往右一格都拖不动。 */
+      BOUND.right = span + side;
+      if(!placed && !drag.active){
+        /* 默认靠右但留一段可拖余量（56px），这样「往右还能顶到头」是看得见的手感 */
+        HOME.x = Math.max(0, BOUND.right - 56);
+        pos.x = HOME.x;                          /* 首帧就站在右边，不从中心滑过去 */
+      }
+    }else{
+      /* 登录页左卡（v26 起可拖）：横向余量按卡宽与角色盒宽现算，不再写死 110 ——
+         与 bare 同一条思路：本体在画面中间约 56% 宽里，抵边时把左右透明留白(side)也吃掉，
+         可见的鱼身才真的贴到卡边；span 保证鱼身至少能挪到卡片左右边缘内侧。
+         最后再按卡宽的 28% 封顶：窄卡（406）不至于把鱼甩到只剩半截。 */
+      var sideE = Math.round(w * 0.22);
+      var spanE = Math.max(0, Math.round((card.clientWidth - w) / 2));
+      BOUND.left = BOUND.right = Math.max(56, Math.min(spanE + sideE, Math.round(card.clientWidth * 0.28)));
+      HOME.x = 0;
+    }
+    return BOUND;
+  }
+
+  function clampPos(){
+    pos.x = Math.max(-BOUND.left, Math.min(BOUND.right, pos.x));
+    pos.y = Math.max(-BOUND.up, Math.min(BOUND.down, pos.y));
+    /* HOME 是弹簧的收敛点：窗口变化后若它还落在新边界外，松手后人会被吸到界外再被钳回来 */
+    HOME.x = Math.max(-BOUND.left, Math.min(BOUND.right, HOME.x));
+    HOME.y = Math.max(-BOUND.up, Math.min(BOUND.down, HOME.y));
+  }
+
+  function applyPos(){
+    card.style.setProperty('--dx', pos.x.toFixed(1) + 'px');
+    card.style.setProperty('--dy', pos.y.toFixed(1) + 'px');
+  }
+  /* 形变写进 --sx/--sy（.dock 的 transform 末尾吃这两个变量，poke/dizzy 关键帧里也带着）。
+     体积守恒：横向拉长 18% ⇔ 纵向压扁 15%。 */
+  function applyJell(){
+    var s = Math.max(-JELL_MAX, Math.min(JELL_MAX, jell.s));
+    var sx, sy;
+    if(jell.ax){ sx = 1 + s; sy = 1 / (1 + s); }
+    else { sy = 1 + s; sx = 1 / (1 + s); }
+    card.style.setProperty('--sx', sx.toFixed(3));
+    card.style.setProperty('--sy', sy.toFixed(3));
+  }
+  /* 定步长弹簧积分：拖拽期间与松手之后共用同一组常数，手感才连贯 */
+  function stepJell(k){
+    k = k || 1;
+    jell.v += (jell.t - jell.s) * JELL_K * k;
+    jell.v *= Math.max(0, 1 - JELL_C * k);
+    jell.s += jell.v * k;
+  }
+  function physics(){
+    if(drag.active){ raf2 = requestAnimationFrame(physics); return; }
+    /* 收敛目标是 HOME 而不是原点：bare 下默认站位在右侧（HOME.x≈134），
+       按原点收敛的话这条循环永远退不出去（每帧都在跑），登录卡则会把人从
+       松手处一路拽回卡片正中。 */
+    var k = 0.02, c = 0.22;
+    pos.vx += (HOME.x - pos.x) * k; pos.vy += (HOME.y - pos.y) * k;
+    pos.vx *= (1 - c); pos.vy *= (1 - c);
+    pos.x += pos.vx; pos.y += pos.vy;
+    /* 甩出去也不能飞出卡片：触边就把该轴速度吃掉并反向留一截（0.45 的弹性）——
+       观感是「撞到卡边弹一下再回家」，另一轴照旧自由弹回。 */
+    if(pos.x < -BOUND.left){ pos.x = -BOUND.left; if(pos.vx < 0) pos.vx = -pos.vx * 0.45; }
+    if(pos.x >  BOUND.right){ pos.x =  BOUND.right; if(pos.vx > 0) pos.vx = -pos.vx * 0.45; }
+    if(pos.y < -BOUND.up){ pos.y = -BOUND.up; if(pos.vy < 0) pos.vy = -pos.vy * 0.45; }
+    if(pos.y >  BOUND.down){ pos.y =  BOUND.down; if(pos.vy > 0) pos.vy = -pos.vy * 0.45; }
+    /* 形变弹簧与位置同帧积分：目标恒为 0（恢复初始形态），欠阻尼让它过冲两下再收住 */
+    stepJell(1);
+    if(Math.abs(HOME.x - pos.x) < .2 && Math.abs(HOME.y - pos.y) < .2 &&
+       Math.abs(pos.vx) < .02 && Math.abs(pos.vy) < .02 &&
+       Math.abs(jell.s) < .004 && Math.abs(jell.v) < .004){
+      pos.x = HOME.x; pos.y = HOME.y; pos.vx = pos.vy = 0;
+      jell.s = jell.v = jell.t = 0;
+      applyPos(); applyJell(); moving = false; raf2 = 0; return;
+    }
+    applyPos(); applyJell(); raf2 = requestAnimationFrame(physics);
+  }
+  function startPhysics(){ if(!raf2){ moving = true; raf2 = requestAnimationFrame(physics); } }
+
+  function pt(e){
+    var r = card.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  /* ================= 交互 ================= */
+  card.addEventListener('pointerdown', function(e){
+    /* v26：内嵌登录页左卡也能拖角色了 —— 原来这里有一道 EMBED 守卫，它就是「鱼拖不动」的根因。
+       触屏的滚动分工改由 touch-action 承担：卡片与鱼身都 pan-y pinch-zoom ——
+       竖划滚宿主页面、横划拖鱼；鱼身若写 none 会把登录卡中央变成滑动死区（见 embed 规则）。
+       竖直滑动被浏览器认领时会发 pointercancel，endDrag 会把它收拾干净。 */
+    if(e.button !== 0 && e.pointerType === 'mouse') return;
+    dragMoved = false;
+    var p = pt(e);
+    drag.active = true; drag.sx = p.x; drag.sy = p.y;
+    drag.bx = pos.x; drag.by = pos.y;      /* 从当前站位起算，按下的那一刻不改变位置 */
+    drag.lx = p.x; drag.ly = p.y; drag.lt = performance.now();
+    drag.vx = drag.vy = 0;
+    card.setPointerCapture(e.pointerId);
+  });
+
+  /* pointermove 里只记「最新的指针位置」，真正写样式交给 rAF 合并：
+     高刷鼠标一帧能来 2~8 个事件，逐条写 4 个 CSS 变量 = 逐条重排，
+     表现就是「指针走一段、角色跳一下」的黏滞感。 */
+  function flushDrag(){
+    rafDrag = 0;
+    if(!dragging) return;
+    var now = performance.now();
+    var dt = Math.max(8, Math.min(48, now - (jell.t0 || now)));
+    var k = Math.min(3, dt / 16.7);          /* 变帧率下弹簧照样稳：按帧时折算积分步长 */
+    jell.t0 = now;
+
+    /* 指针速度每帧衰减一次。指针停住后不会再有 pointermove，而 drag.vx/vy 会一直停在
+       「刚才那一下很快」上 —— 不衰减的话手指一停，鱼就永久保持被拉长的样子。 */
+    drag.vx *= Math.pow(0.82, k); drag.vy *= Math.pow(0.82, k);
+
+    /* 目标点（钳在边界内）与当前位置之间的差就是跟随延迟：pos 每帧只补 LAG 的比例，
+       于是「指针走一段、鱼慢半拍跟上」，差值本身又被拿去驱动形变。 */
+    drag.tx = Math.max(-BOUND.left, Math.min(BOUND.right, drag.bx + drag.pdx));
+    drag.ty = Math.max(-BOUND.up, Math.min(BOUND.down, drag.by + drag.pdy));
+    var fx = drag.tx - pos.x, fy = drag.ty - pos.y;
+    pos.x += fx * LAG;
+    pos.y += fy * LAG;
+
+    /* 形变大小 = 滞后距离(px) * 系数 + 指针速度(px/ms) * 系数，方向按「被拉扯的那个轴」取正负；
+       横向拉伸时纵向自动压扁（sy = 1/sx），看起来是软体被拽，而不是整体缩放。 */
+    var lag = Math.hypot(fx, fy), spd = Math.hypot(drag.vx, drag.vy);
+    var amt = Math.min(JELL_MAX, lag * 0.0055 + spd * 0.08);
+    jell.ax = Math.abs(fx) >= Math.abs(fy) ? 1 : 0;
+    jell.t  = (jell.ax ? fx : fy) >= 0 ? amt : -amt;
+
+    stepJell(k);
+    applyPos();
+    applyJell();
+    card.style.setProperty('--tiltY', (pos.x * 0.09).toFixed(2) + 'deg');
+    card.style.setProperty('--tiltX', (-pos.y * 0.06).toFixed(2) + 'deg');
+
+    /* 指针停住时不会再有 pointermove：这里自己接着排帧，直到形变也落回静止。 */
+    if(dragging && (jell.t !== 0 || Math.abs(jell.s) > 0.002 || Math.abs(jell.v) > 0.002)){
+      rafDrag = requestAnimationFrame(flushDrag);
+    }
+  }
+  card.addEventListener('pointermove', function(e){
+    var p = pt(e);
+    /* 拖拽期间不再写光斑/倾斜：这两个值当帧就会被 flushDrag 覆盖，
+       多写一次只是白白多触发一轮样式重算，指针越密越明显。 */
+    if(!drag.active){
+      card.style.setProperty('--mx', p.x + 'px');
+      card.style.setProperty('--my', p.y + 'px');
+      var nx = (p.x / card.clientWidth  - .5), ny = (p.y / card.clientHeight - .5);
+      card.style.setProperty('--tiltY', (nx * 9).toFixed(2) + 'deg');
+      card.style.setProperty('--tiltX', (-ny * 7).toFixed(2) + 'deg');
+    }
+
+    if(!drag.active) return;
+    drag.pdx = p.x - drag.sx; drag.pdy = p.y - drag.sy;
+    /* 阈值 3px：2px 的手抖不该被当成拖拽，但门槛太高会让「按下就动」的手感变钝 */
+    if(!dragging && Math.hypot(drag.pdx, drag.pdy) > 3){
+      dragging = true;
+      card.classList.add('dragging','grabbing');
+      card.classList.remove('poke');
+      energy = 2.2;
+      /* 被拎起来的那一下先压一压（s 从负值起步，弹簧马上把它推到拉伸方向）= 抓握感 */
+      jell.s = -0.05; jell.v = 0; jell.t = 0; jell.t0 = performance.now();
+      /* 拖拽只做物理反馈：池里的片段都是完整表演，不为拖拽单独切段（强行切会违反「播完才换」） */
+      say(pick(LINES.drag));
+    }
+    var now = performance.now();
+    var dt = Math.max(8, now - drag.lt);
+    drag.vx = (p.x - drag.lx) / dt; drag.vy = (p.y - drag.ly) / dt;
+    drag.lx = p.x; drag.ly = p.y; drag.lt = now;
+
+    if(dragging && !rafDrag) rafDrag = requestAnimationFrame(flushDrag);
+  });
+
+  function endDrag(e){
+    if(!drag.active) return;
+    /* 松手时先把还在排队的那一帧补写掉：否则最后一小段指针位移会丢，
+       表现为「手停了角色还差几像素」或回弹起点错位。 */
+    if(rafDrag){ cancelAnimationFrame(rafDrag); rafDrag = 0; flushDrag(); }
+    drag.active = false;
+    var was = dragging;
+    dragging = false;
+    if(was) dragMoved = true;
+    card.classList.remove('dragging','grabbing');
+    if(e && e.pointerId != null && card.hasPointerCapture && card.hasPointerCapture(e.pointerId)){
+      try{ card.releasePointerCapture(e.pointerId); }catch(_e){}
+    }
+    if(!was) return;
+    var sp = Math.hypot(drag.vx, drag.vy) * 1000;
+    if(sp > 900){
+      pos.vx = drag.vx * 22; pos.vy = drag.vy * 22;
+      var p = pt(e);
+      stars(p.x, p.y);
+      card.classList.add('dizzy');
+      say(pick(LINES.fling), 1600);
+      setTimeout(function(){ card.classList.remove('dizzy'); }, 1200);
+    }else{
+      if(Math.hypot(pos.x, pos.y) < 40) say(pick(LINES.home), 1400);
+    }
+    /* bare：人落在哪就停在哪（HOME 跟着走），不然拖到最左边缘一松手就弹回右边，
+       「贴靠左侧顶头」这个动作根本留不住；登录卡仍是弹回中心。 */
+    if(BARE){ placed = true; HOME.x = pos.x; HOME.y = pos.y; }
+    /* 松手 = 把「还欠着的那段位移 + 刚才的拖拽速度」变现成一次形变冲量：
+       jell.t 归零后弹簧把 s 拽回去，冲量让它先过冲再收住 —— 于是先拉长、再压扁、
+       最后回到 1（恢复初始形态），这就是可看见的回弹。 */
+    var restX = drag.tx - pos.x, restY = drag.ty - pos.y;
+    var rest  = jell.ax ? restX : restY;
+    var dir   = rest >= 0 ? 1 : -1;
+    jell.t = 0;
+    jell.s = Math.max(-JELL_MAX, Math.min(JELL_MAX, jell.s + dir * Math.min(0.06, Math.abs(rest) * 0.0015)));
+    jell.v = dir * Math.max(0.012, Math.min(0.06, sp * 0.00006 + Math.abs(rest) * 0.0008));
+    jell.t0 = 0;                       /* 后续交给 physics 的定步长积分 */
+    startPhysics();
+  }
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+
+  /* 点击 = 摸摸 */
+  var clickTimer = 0, suppressClick = false, lastPoke = '', dragMoved = false;
+  card.addEventListener('click', function(e){
+    if(suppressClick || dragMoved) return;
+    var ev = { clientX: e.clientX, clientY: e.clientY };
+    clearTimeout(clickTimer);
+    clickTimer = setTimeout(function(){ doPoke(ev); }, 240);
+  });
+  function doPoke(e){
+    var p = pt(e);
+    card.classList.remove('poke'); void card.offsetWidth; card.classList.add('poke');
+    setTimeout(function(){ card.classList.remove('poke'); }, 560);
+    burst(p.x, p.y, 8);
+    n++; nEl.textContent = n;
+    energy = Math.min(3.2, energy + 0.8);
+    /* 单击只摸摸：不换片。换片权在双击（见下面的 dblclick） */
+    say(n % 10 === 0 ? pick(LINES.tenth) : pick(LINES.poke), 1900);
+  }
+
+  /* 双击 = 换一段动画（唯一换片方式；立即打断当前这段，重新掷骰子） */
+  card.addEventListener('dblclick', function(){
+    clearTimeout(clickTimer);
+    suppressClick = true;
+    setTimeout(function(){ suppressClick = false; }, 420);
+    if(!vidOk){
+      var next = card.getAttribute('data-mode') === 'mature' ? '' : 'mature';
+      if(next) card.setAttribute('data-mode', next); else card.removeAttribute('data-mode');
+      say(next ? pick(LINES.mature || ['换了个样子']) : '还是原来的样子', 1600);
+      return;
+    }
+    var ok = playRandom();
+    burst(card.clientWidth/2, card.clientHeight*0.55, 6);
+    energy = 2.6;
+    if(ok) say(pick(LINES.swap), 1900);
+  });
+
+  /* 悬停 */
+  var hoverT = 0, hoverSaid = false;
+  card.addEventListener('pointerenter', function(){
+    hovered = true;
+    card.classList.add('hovered');
+    energy = 1.9;
+    clearTimeout(hoverT);
+    if(!hoverSaid){ hoverT = setTimeout(function(){ say(pick(LINES.hover)); hoverSaid = true; }, 420); }
+  });
+  card.addEventListener('pointerleave', function(){
+    hovered = false;
+    card.classList.remove('hovered');
+    card.style.setProperty('--tiltX','0deg');
+    card.style.setProperty('--tiltY','0deg');
+    energy = 1.2;
+    clearTimeout(hoverT);
+    hoverSaid = false;
+  });
+
+
+  /* 键盘 */
+  card.addEventListener('keydown', function(e){
+    var step = 12;
+    if(e.key === ' '){
+      e.preventDefault();
+      doPoke(centerPoint());
+    }else if(e.key === 'Enter'){
+      /* 键盘等价于双击：换一段动画 */
+      e.preventDefault();
+      if(vidOk && playRandom()){
+        burst(card.clientWidth/2, card.clientHeight*0.55, 6);
+        energy = 2.6;
+        say(pick(LINES.swap), 1900);
+      }else{
+        doPoke(centerPoint());
+      }
+    }else if(e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+      e.preventDefault();
+      if(e.key === 'ArrowLeft')  pos.x -= step;
+      if(e.key === 'ArrowRight') pos.x += step;
+      if(e.key === 'ArrowUp')    pos.y -= step;
+      if(e.key === 'ArrowDown')  pos.y += step;
+      clampPos();
+      applyPos(); energy = 2;
+      startPhysics();
+    }else if(e.key === 'Escape'){
+      pos.x = pos.y = 0; pos.vx = pos.vy = 0;
+      jell.s = jell.v = jell.t = 0;
+      applyPos(); applyJell();
+    }
+  });
+
+  /* ================= 启动 ================= */
+  var raf = 0;
+  function boot(){
+    if(EMBED){ card.setAttribute('tabindex','-1'); card.removeAttribute('role'); }
+    resize();
+    window.addEventListener('resize', resize, { passive:true });
+    if(reduce){ tick(); cancelAnimationFrame(raf); }
+    else { raf = requestAnimationFrame(tick); }
+    initVideo();
+  }
+  if(document.readyState === 'complete') boot(); else window.addEventListener('load', boot);
+
+  window.__whale = {
+    poke: function(){ doPoke(centerPoint()); },
+    play: function(id){ return play(id); },
+    random: function(){ return randomClip(); },          /* 掷一次，看抽到哪段 */
+    playRandom: function(){ return playRandom(); },      /* 掷一次并立即切换 */
+    bounds: function(){ return measureBounds(); },       /* 重新测量上/下可拖范围 */
+    pool: POOL.map(function(p){ return { id:p.id, f:p.f, label:p.label, alpha:p.a !== 0 }; }),
+    state: function(){
+      var act = vids[vi];
+      return { n:n, mode: vidOk ? 'video' : 'static', clip: cur,
+               clipLabel: cur ? clipOf(cur).label : '',
+               poolSize: POOL.length,
+               dragging: dragging, dx: pos.x, dy: pos.y,
+               /* v26 手感自检口：sx/sy 形变、lag 跟随延迟、target 指针目标、jell* 弹簧状态 */
+               sx: +(+(card.style.getPropertyValue('--sx')) || 1),
+               sy: +(+(card.style.getPropertyValue('--sy')) || 1),
+               jellS: +jell.s.toFixed(4), jellV: +jell.v.toFixed(4), jellT: +jell.t.toFixed(4),
+               jellAxis: jell.ax ? 'x' : 'y',
+               lag: { x: +(drag.tx - pos.x).toFixed(2), y: +(drag.ty - pos.y).toFixed(2) },
+               target: { x: +drag.tx.toFixed(2), y: +drag.ty.toFixed(2) },
+               touchAction: getComputedStyle(card).touchAction,
+               charTouch: (function(){ var c = document.querySelector('.char'); return c ? getComputedStyle(c).touchAction : ''; })(),
+               busy: busy, loop: true,
+    bound: { left: BOUND.left, right: BOUND.right, up: BOUND.up, down: BOUND.down },
+               progress: act && act.duration ? +(act.currentTime / act.duration).toFixed(2) : 0,
+               video: vids.map(function(v){ return { clip: v.dataset.clip || '', t: +v.currentTime.toFixed(2), on: v.classList.contains('on') }; }) };
+    }
+  };
+})();
+</script>
+</body>
+</html>
