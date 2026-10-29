@@ -8,7 +8,7 @@
  * AppID/AppSecret 才能真跑通，这些资料只有站点主人能提供（清单见 server/README.md）。
  * 代码路径全部写完，填上 .env 里的六个变量即生效；没填时按钮是灰的，点了回 501 可读原因。
  *
- * 与单会话规则的关系：第三方登录最终同样走 createSession —— 一个账号仍然只有一条会话。
+ * 与设备会话规则的关系：第三方登录最终同样走 createSession —— 一个账号每类设备（pc/mobile）各一条会话。
  * 因此 /start 与 /callback 都先查 currentUser(req)：已登录再走一遍第三方授权，等于
  * 「用别人的号登录、把当前号顶掉」，是绕过「已登录不许换号」的后门，两处都堵死。
  */
@@ -69,12 +69,12 @@ const STMT = {
   insertLink: db.prepare('INSERT INTO oauth_links (provider, open_id, user_id, nick, avatar, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
-  insertUser: db.prepare('INSERT INTO users (email, password_hash, name, emoji, grad, level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  insertUser: db.prepare('INSERT INTO users (email, password_hash, name, emoji, grad, avatar, level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
 };
 
 /** 建号 + 绑 link 放在一个事务里：不允许出现「有用户没绑定」或「有绑定没用户」的半截状态 */
 const TXN_SIGNUP = db.transaction(function (row) {
-  const info = STMT.insertUser.run(row.email, '', row.name, row.emoji, row.grad, 1, row.ts, row.ts);
+  const info = STMT.insertUser.run(row.email, '', row.name, row.emoji, row.grad, row.avatar || '', 1, row.ts, row.ts);
   STMT.insertLink.run(row.provider, row.openId, info.lastInsertRowid, row.nick, row.avatar, row.ts);
   return info.lastInsertRowid;
 });
@@ -246,21 +246,6 @@ function oauthEmail(p, openId) {
   return p.id + '_' + openId + '@oauth';
 }
 
-function pickEmoji() {
-  const pool = ['🐳', '🐬', '🐟', '🦈', '🐙', '🦑'];
-  return pool[crypto.randomInt(0, pool.length)];
-}
-
-function pickGrad() {
-  const pool = [
-    'linear-gradient(135deg,#7aa2ff,#a46bff)',
-    'linear-gradient(135deg,#5ee7df,#b490ca)',
-    'linear-gradient(135deg,#f6d365,#fda085)',
-    'linear-gradient(135deg,#a1c4fd,#c2e9fb)'
-  ];
-  return pool[crypto.randomInt(0, pool.length)];
-}
-
 async function routes(fastify) {
   // ---------------- 渠道可用状态 ----------------
   fastify.get('/providers', async function () {
@@ -373,13 +358,27 @@ async function routes(fastify) {
         STMT.insertLink.run(p.id, openId, dup.id, nick, idn.avatar || '', ts);
       } else {
         const uid = TXN_SIGNUP({
-          email: email, name: nick, emoji: pickEmoji(), grad: pickGrad(),
+          /* v37：第三方注册与邮箱注册一致，初始头像统一走前端默认鲸鱼图，
+             不再从渠道里随机挑 emoji / 渐变。 */
+          email: email, name: nick, emoji: '', grad: '',
           provider: p.id, openId: openId, nick: nick, avatar: idn.avatar || '', ts: ts
         });
         user = STMT.userById.get(uid);
       }
     }
     if (!user) return backToLogin(reply, 'OAUTH_FAILED', 'provider=' + p.id);
+
+    /* 头像跟着渠道走：users.avatar 为空时用渠道头像回填（首次绑定与历史账号都补一次）。
+       用户自己上传过头像就绝不覆盖 —— 那才是他自己的选择。 */
+    if (!user.avatar && idn.avatar) {
+      try {
+        db.prepare('UPDATE users SET avatar = ?, updated_at = ? WHERE id = ?')
+          .run(String(idn.avatar).slice(0, 500), now(), user.id);
+        user = STMT.userById.get(user.id) || user;
+      } catch (err) {
+        req.log.warn({ err: err && err.message, userId: user.id }, '[oauth] 头像回填失败');
+      }
+    }
 
     // 单会话：createSession 内部就是一个事务「先删该账号旧行、再插新行」，
     // 所以第三方登录同样顶替旧会话，不需要在这里额外再删一次。

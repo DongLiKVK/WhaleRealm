@@ -3,7 +3,21 @@
 
 const { db, now, parseJson, publicUser } = require('../db');
 const { requireAuth, optionalAuth, isAdmin } = require('../auth');
-const { imageUrl } = require('./upload');
+const { imageUrl, ownsKey } = require('./upload');
+
+/* 审核状态过滤（P0）：posts.status 由 admin-db.js 的补列迁移加到老库上、由
+   schema.sql 直接建在新库里。启动时探一次列，避免在「没跑过迁移」的库
+   （例如只 require db 的脚本）上拼出一条引用不存在列的 SQL，把 /feed 打成 500。
+   公开读一律只认 published：后台把动态改成 rejected / hidden 之后前台必须立刻看不见，
+   否则「审核」就只是后台里的一次点击。 */
+const HAS_POST_STATUS = (() => {
+  try {
+    return db.prepare('PRAGMA table_info(posts)').all().some((c) => c.name === 'status');
+  } catch {
+    return false;
+  }
+})();
+const ONLY_PUBLISHED = HAS_POST_STATUS ? " AND status = 'published'" : '';
 
 /** 把 posts 行 + 图片 + 作者拼成前端要的形状 */
 function shapePost(row, viewerId) {
@@ -58,8 +72,10 @@ async function routes(fastify) {
     const viewer = req.user ? req.user.id : null;
 
     const rows = cursor
-      ? db.prepare('SELECT * FROM posts WHERE created_at < ? ORDER BY pinned DESC, created_at DESC LIMIT ?').all(cursor, limit)
-      : db.prepare('SELECT * FROM posts ORDER BY pinned DESC, created_at DESC LIMIT ?').all(limit);
+      ? db.prepare('SELECT * FROM posts WHERE created_at < ?' + ONLY_PUBLISHED +
+        ' ORDER BY pinned DESC, created_at DESC LIMIT ?').all(cursor, limit)
+      : db.prepare('SELECT * FROM posts WHERE 1 = 1' + ONLY_PUBLISHED +
+        ' ORDER BY pinned DESC, created_at DESC LIMIT ?').all(limit);
 
     const items = rows.map((r) => shapePost(r, viewer));
     const nextCursor = rows.length === limit ? rows[rows.length - 1].created_at : null;
@@ -85,10 +101,13 @@ async function routes(fastify) {
               type: 'object',
               required: ['key'],
               properties: {
-                key: { type: 'string' },
-                w: { type: 'integer' },
-                h: { type: 'integer' },
-                type: { type: 'string' }
+                /* key 的长度上限只是第一道闸；真正的形状与归属在下面用 ownsKey 校验，
+                   因为 schema 的 pattern 失败会被 fastify 折成通用 400 BAD_REQUEST，
+                   前端拿不到可读原因，也就没法告诉用户「这张图不是本站在你的账号下签发的」。 */
+                key: { type: 'string', maxLength: 96 },
+                w: { type: 'integer', minimum: 0, maximum: 100000 },
+                h: { type: 'integer', minimum: 0, maximum: 100000 },
+                type: { type: 'string', maxLength: 40 }
               }
             }
           }
@@ -105,6 +124,24 @@ async function routes(fastify) {
     }
     if (text.length > 5000) {
       return reply.code(400).send({ ok: false, error: { code: 'TEXT_TOO_LONG', message: '正文太长了，5000 字以内' } });
+    }
+
+    /* ---------- 图片键白名单（存储型 XSS 的根在这里） ----------
+       前端会把 post_images.cos_key 原样拼进 imageUrl()，最终成为 <img src="..."> 的属性值。
+       只要库里能存进一个带引号的键，就能闭合属性插事件处理器。所以入库前必须证明：
+         a) 形状是 /api/upload/sign 唯一会签发的那种（正则里没有任何引号/尖括号/空白）；
+         b) 键里 u/ 后的用户段就是当前发帖人（别人签发的键不能拿来用）。
+       两项都过才落库；否则整条动态拒绝，不做「部分成功」。 */
+    for (let i = 0; i < images.length; i++) {
+      if (!ownsKey(images[i] && images[i].key, userId)) {
+        return reply.code(400).send({
+          ok: false,
+          error: {
+            code: 'BAD_IMAGE_KEY',
+            message: '第 ' + (i + 1) + ' 张图的 key 不合法：必须是本站上传接口为该账号签发的键'
+          }
+        });
+      }
     }
 
     const ts = now();
@@ -133,7 +170,12 @@ async function routes(fastify) {
     if (!row) {
       return reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: '这条动态不存在或已被删除' } });
     }
-    return { ok: true, data: { post: shapePost(row, req.user ? req.user.id : null) } };
+    /* 未过审 / 被下架的内容，只有作者本人和管理员看得到；对其他人一律「不存在」 */
+    const viewerId = req.user ? req.user.id : null;
+    if (HAS_POST_STATUS && row.status !== 'published' && row.user_id !== viewerId && !isAdmin(req.user)) {
+      return reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: '这条动态不存在或已被删除' } });
+    }
+    return { ok: true, data: { post: shapePost(row, viewerId) } };
   });
 
   // 删除动态：仅作者本人或管理员
@@ -183,7 +225,7 @@ async function routes(fastify) {
   // 评论列表
   fastify.get('/posts/:id/comments', async (req, reply) => {
     const postId = Number(req.params.id);
-    if (!db.prepare('SELECT 1 FROM posts WHERE id = ?').get(postId)) {
+    if (!db.prepare('SELECT 1 FROM posts WHERE id = ?' + ONLY_PUBLISHED).get(postId)) {
       return reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: '这条动态不存在' } });
     }
     const rows = db.prepare('SELECT * FROM comments WHERE post_id = ? ORDER BY created_at ASC').all(postId);
@@ -214,7 +256,7 @@ async function routes(fastify) {
     }
   }, async (req, reply) => {
     const postId = Number(req.params.id);
-    if (!db.prepare('SELECT 1 FROM posts WHERE id = ?').get(postId)) {
+    if (!db.prepare('SELECT 1 FROM posts WHERE id = ?' + ONLY_PUBLISHED).get(postId)) {
       return reply.code(404).send({ ok: false, error: { code: 'NOT_FOUND', message: '这条动态不存在' } });
     }
     const text = String(req.body.text || '').trim();
@@ -226,9 +268,13 @@ async function routes(fastify) {
     }
 
     const ts = now();
-    const info = db.prepare('INSERT INTO comments (post_id, user_id, parent_id, text, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(postId, req.user.id, req.body.parentId || null, text, ts);
-    db.prepare('UPDATE posts SET comments = comments + 1 WHERE id = ?').run(postId);
+    /* 插入与计数放同一个事务：分开写的话插入成功、计数失败会留下永久漂移的评论数 */
+    const info = db.transaction(() => {
+      const r = db.prepare('INSERT INTO comments (post_id, user_id, parent_id, text, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(postId, req.user.id, req.body.parentId || null, text, ts);
+      db.prepare('UPDATE posts SET comments = comments + 1 WHERE id = ?').run(postId);
+      return r;
+    })();
 
     const c = db.prepare('SELECT * FROM comments WHERE id = ?').get(info.lastInsertRowid);
     return { ok: true, data: { comment: { id: c.id, user: publicUser(req.user), parentId: c.parent_id, text: c.text, likes: 0, time: relTime(c.created_at) } } };

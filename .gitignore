@@ -6,21 +6,30 @@ dist
 dist.old/
 
 # ---- 运行时数据与上传 ----
-uploads/
+# SQLite 库与 WAL/SHM 边车文件都由 npm run seed 现场生成，不入库
 server/data/*.db
 server/data/*.db-*
 server/data/*.db*
 server/data/*.sqlite
 server/data/*.sqlite3
+# 没有 COS 时后端把图片落在 server/uploads（对外 URL 是 /uploads/xxx）
+server/uploads/
+/uploads/
 
-# ---- 截图 / 浏览器 profile（shots/ 约 267MB / 500+ 文件，绝不入库）----
+# ---- 开发期自检脚本与截图 / 浏览器 profile（不入库）----
 shots/
+
+# ---- 鲸鱼娘卡片素材（107 段 webm / 约 60MB，不入库）----
+# 部署前把 webm 放进 whale/clips-rand；deploy/build.mjs 会整目录拷进 dist
+whale/clips-rand/
 
 # ---- 日志 ----
 *.log
 logs/
 
 # ---- 环境变量与密钥 ----
+# 验收脚本缓存的 TOTP secret（算验证码用，等同于第二因素凭据）
+qa/.admin-2fa-secrets.json
 .env
 .env.*
 !.env.example
@@ -28,9 +37,7 @@ logs/
 *.key
 !server/package-lock.json
 
-# ---- 评审临时文件 / DSH 运维锁 ----
-reviews/*.tmp
-reviews/**/*.tmp
+# ---- DSH 运维锁 ----
 .dsh-ops-update-*.lock
 **/.dsh-ops-update-*.lock
 
@@ -43,3 +50,13 @@ Desktop.ini
 tmp/
 .cache/
 coverage/
+
+# ---- 本地调试脚本与分析产物（2026-10 整理）----
+.tmp*
+.cprof-*
+.preview-check/
+.shots/
+.dsh-ops/
+_audit/
+at_analysis/
+downloads/

@@ -4,10 +4,13 @@
   "description": "鲸域社区后端 API",
   "main": "src/index.js",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
@@ -15,8 +18,9 @@
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/websocket": "^10.0.1",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.3.0",
+    "better-sqlite3": "^12.11.1",
     "cos-nodejs-sdk-v5": "^2.14.6",
-    "fastify": "^4.28.1"
+    "fastify": "^4.28.1",
+    "qrcode-generator": "^1.4.4"
   }
 }

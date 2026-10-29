@@ -11,6 +11,7 @@
 
 const { db, now, publicUser } = require('../db');
 const { requireAuth } = require('../auth');
+const { fail } = require('../http');
 
 /** uid -> Set<WebSocket>，支持同一用户多端在线 */
 const online = new Map();
@@ -48,7 +49,7 @@ function broadcast(payload, exceptUid) {
   }
 }
 
-async function routes(fastify) {
+async function wsRoutes(fastify) {
   fastify.get('/ws', { websocket: true }, (socket, req) => {
     /* 鉴权：cookie 优先，其次 query 里的 token */
     let user = null;
@@ -134,7 +135,85 @@ async function routes(fastify) {
     });
   });
 
-  /* 拉历史消息 */
+}
+
+/* 私信历史单独成一个插件：它和 /ws 的挂载前缀不同 —— index.js 里挂在 /api 下
+   （→ /api/messages/:uid），而 /ws 必须留在根路径给 nginx 单独转发。
+   之前两个路由挤在同一个插件里、只注册一次且没有前缀，于是前端调的
+   /api/messages/:uid 一直是 404 Route not found —— 私信整条链路是死的。 */
+async function apiRoutes(fastify) {
+  /* 会话列表：前端消息中心原来是空的 —— dmThreads 只从本地 localStorage 拼，
+     服务端一个会话接口都没有。这里按「最后一条消息」聚合出对方 + 未读数。 */
+  fastify.get('/messages', { preHandler: requireAuth }, async (req) => {
+    const rows = db.prepare(
+      'SELECT * FROM messages WHERE from_user = ? OR to_user = ? ORDER BY id DESC LIMIT 500'
+    ).all(req.user.id, req.user.id);
+
+    const map = new Map();
+    for (const m of rows) {
+      const peer = m.from_user === req.user.id ? m.to_user : m.from_user;
+      let c = map.get(peer);
+      if (!c) { c = { peer: peer, last: m, unread: 0 }; map.set(peer, c); }
+      if (m.to_user === req.user.id && !m.read_at) c.unread += 1;
+    }
+
+    return {
+      ok: true,
+      data: {
+        items: [...map.values()].map((c) => ({
+          peer: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(c.peer)),
+          last: {
+            id: c.last.id,
+            from: c.last.from_user,
+            to: c.last.to_user,
+            body: c.last.body,
+            createdAt: c.last.created_at
+          },
+          unread: c.unread
+        }))
+      }
+    };
+  });
+
+  /* 发私信（REST 兜底）：WS 断线时前端仍能把消息送出去。
+     落库 + 推给在线的接收方与自己的其它端，返回落库后的那一行。 */
+  fastify.post('/messages/:uid', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (req, reply) => {
+    const peer = Number(req.params.uid);
+    if (!Number.isInteger(peer) || peer <= 0) return fail(reply, 400, 'BAD_UID', null, '收件人不合法');
+    if (peer === req.user.id) return fail(reply, 400, 'SELF_MESSAGE', null, '不能给自己发私信');
+    if (!db.prepare('SELECT 1 FROM users WHERE id = ?').get(peer)) {
+      return fail(reply, 404, 'USER_NOT_FOUND', null, '这个用户不存在');
+    }
+    const body = String((req.body && req.body.body) == null ? '' : req.body.body).trim().slice(0, 2000);
+    if (!body) return fail(reply, 400, 'EMPTY_MESSAGE', null, '消息不能为空');
+
+    const ts = now();
+    const info = db.prepare('INSERT INTO messages (from_user, to_user, body, created_at) VALUES (?, ?, ?, ?)')
+      .run(req.user.id, peer, body, ts);
+
+    const payload = {
+      type: 'msg',
+      data: {
+        id: info.lastInsertRowid,
+        from: publicUser(req.user),
+        fromId: req.user.id,
+        to: peer,
+        body: body,
+        createdAt: ts
+      }
+    };
+    sendTo(peer, payload);
+    sendTo(req.user.id, payload);
+
+    return {
+      ok: true,
+      data: { item: { id: info.lastInsertRowid, from: req.user.id, to: peer, body: body, createdAt: ts } }
+    };
+  });
+
   fastify.get('/messages/:uid', { preHandler: requireAuth }, async (req) => {
     const peer = Number(req.params.uid);
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
@@ -143,6 +222,13 @@ async function routes(fastify) {
       WHERE (from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)
       ORDER BY id DESC LIMIT ?
     `).all(req.user.id, peer, peer, req.user.id, limit);
+
+    /* 拉取即已读：对方发给我的未读消息在这一刻清掉，未读数才不会是假的。
+       只动「发给我」的行，我发出去的状态不变。 */
+    try {
+      db.prepare('UPDATE messages SET read_at = ? WHERE to_user = ? AND from_user = ? AND read_at = 0')
+        .run(now(), req.user.id, peer);
+    } catch { /* 忽略：标记已读失败不影响历史消息 */ }
 
     return {
       ok: true,
@@ -159,5 +245,6 @@ async function routes(fastify) {
   });
 }
 
-module.exports = routes;
+module.exports = apiRoutes;
+module.exports.ws = wsRoutes;
 module.exports.online = online;

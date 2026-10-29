@@ -11,16 +11,24 @@ Fastify + better-sqlite3。启动前先看 ../server/.env.example，复制成 .e
 
 ### 1. 短信通道（手机号认证）
 
-| 变量 | 说明 |
-| --- | --- |
-| `SMS_PROVIDER` | `aliyun` 或 `tencent`（当前骨架只读不校验，接通道时用） |
-| `SMS_ACCESS_KEY_ID` / `SMS_ACCESS_KEY_SECRET` | 阿里云或腾讯云的 AccessKey（**不要用主账号 AK，建一个只授权短信的子账号**） |
-| `SMS_SIGN_NAME` | 短信签名，例如「鲸域社区」，需在服务商后台审核通过 |
-| `SMS_TEMPLATE_CODE` | 验证码模板编号，模板内容里必须含 `${code}` 变量，例如「您的验证码是 ${code}，5 分钟内有效」 |
-| `SMS_DEV` | 本地联调时设 `1`：`POST /api/auth/phone/send` 会在响应里回显 `devCode`。**线上必须是 0 或留空** |
+通道实现集中在 `src/sms/index.js`（v48），只有内置 `crypto` + `fetch`，**没有云 SDK 依赖**。
+`SMS_PROVIDER` 四选一；缺项时 `usable()` 为 false，前端照旧显示「短信通道还没接通」并让用户跳过。
 
-> 接通道的位置在 `src/routes/phone.js` 的 `POST /send` 里，已用 `>>> 接真实短信通道就在这里 <<<` 标出；
-> 发送失败要回滚那次插入并返回 500，不要把「没发出去」当成「已发送」。
+| provider | 必需 env | 说明 |
+| --- | --- | --- |
+| 留空 / `none` | — | 未接通。码只写日志，`/send` 如实回 `delivered:false` |
+| `dev` | — | 不发真短信，码回显在响应（`devCode`）与日志。**线上必须换掉** |
+| `tencent` | `SMS_SECRET_ID` `SMS_SECRET_KEY` `SMS_SDK_APP_ID` `SMS_SIGN_NAME` `SMS_TEMPLATE_ID` | 走 `SendSms` 2021-01-11，TC3-HMAC-SHA256。模板要有**两个**变量：`{1}` 验证码、`{2}` 有效分钟数 |
+| `aliyun` | `SMS_ACCESS_KEY_ID` `SMS_ACCESS_KEY_SECRET` `SMS_SIGN_NAME` `SMS_TEMPLATE_CODE` | 走 dysmsapi RPC 2017-05-25，HMAC-SHA1。模板变量名必须是 `code` |
+| `webhook` | `SMS_WEBHOOK_URL`（+ `SMS_WEBHOOK_SECRET` `SMS_WEBHOOK_TOKEN`） | POST JSON `{phone,code,ttl,scene}`，带 `X-SMS-Sign: HMAC-SHA256(rawBody, SECRET)`，2xx 即受理 |
+
+`SMS_REGION` 可选：腾讯云默认 `ap-guangzhou`，阿里云默认 `cn-hangzhou`。
+
+**失败必须回滚**：`phone.js` 的 `/send` 在 `sms.send()` 抛错时先 `DELETE phone_codes` 再回
+`502 SMS_FAILED`。留着那条码等于白送 5 次撞码机会，而且「发失败却能验过」没法向用户解释。
+
+> 备案还没下来的联调姿势：`SMS_PROVIDER=dev`（本机）或 `webhook` 指向自建网关（测试环境）。
+> 腾讯云/阿里云都提供「测试签名 + 测试模板」，但**只能发给白名单里的号码**，不能当线上通道。
 
 ### 2. QQ 互联（第三方登录）
 
@@ -70,16 +78,19 @@ Authorization callback URL 必须与上面一致（GitHub 允许一个，改了�
 | 方法 | 路径 | 限流 | 说明 |
 | --- | --- | --- | --- |
 | POST | `/api/auth/register` | 5/10min | 注册并自动登录；已登录调用 409 `ALREADY_AUTHED` |
-| POST | `/api/auth/login` | 10/10min | 登录；同账号已有会话时 409 `ALREADY_ONLINE`（带 `data.canTakeover`），传 `takeover:true` 才顶替 |
+| POST | `/api/auth/login` | 10/10min | 登录；同账号**同设备**（`pc`/`mobile`，由 UA 推）已有会话时 409 `ALREADY_ONLINE`（带 `data.canTakeover`、`data.device`、`data.label`），传 `takeover:true` 才顶替那一台 |
 | POST | `/api/auth/logout` | — | 删除服务端会话行 + 清 cookie，幂等 |
 | GET | `/api/auth/me` | — | 当前用户 + 会话（`phoneMasked`/`phoneVerified` 在这里） |
 | POST | `/api/auth/switch` | 30/10min | **恒 409 `AUTH_LOCKED`**，见下 |
 | POST | `/api/auth/phone/send` | 5/10min | 发验证码（需登录） |
 | POST | `/api/auth/phone/verify` | 10/10min | 校验并绑定（需登录） |
 | GET | `/api/auth/phone/state` | — | 绑定状态，号码只回打码值 |
+| GET | `/api/auth/phone/config` | — | 通道状态：`{smsEnabled, provider, devMode, ttl, cooldown}`，前端据此决定是否提示「通道没接通」 |
 | GET | `/api/auth/oauth/providers` | — | 三家渠道的可用状态 |
 | GET | `/api/auth/oauth/:provider/start` | 30/10min | 302 到渠道授权页；未配置 501 `OAUTH_NOT_CONFIGURED` |
 | GET | `/api/auth/oauth/:provider/callback` | 60/10min | 回调：换身份 → 绑定或建号 → 开单会话 → 302 回前端 |
+| GET | `/api/auth/sessions` | — | 当前账号的会话列表（最多两条：电脑 / 手机），`key` 只是 sid 前 8 位，`current` 标出本请求那条 |
+| POST | `/api/auth/sessions/revoke` | — | 退出某台：body `{key}`（`/^[0-9a-f]{8}$/`，只能删自己的；不存在 404 `SESSION_NOT_FOUND`）或 `{others:true}`（除当前之外全部） |
 
 ### 为什么 `/switch` 永远失败
 
@@ -87,10 +98,12 @@ Authorization callback URL 必须与上面一致（GitHub 允许一个，改了�
 前端如果哪天误调用，拿到的一定是 `409 AUTH_LOCKED`，而不是一个悄悄换了身份的会话。
 配合 `register`/`login` 在已登录时的 `409 ALREADY_AUTHED`，换账号的唯一路径只剩「先退出登录」。
 
-### 单账号单会话是怎么保证的
+### 手机 / 电脑各一条会话是怎么保证的（v46）
 
-1. 每次签发都走 `createSession()`：一个事务里「先删该 user 的旧行、再插新行」，
-   配合 `sessions(user_id)` 唯一索引，任一时刻每账号至多一行。
+1. 每次签发都走 `createSession()`：一个事务里「先删该 user **该 device** 的旧行、再插新行」，
+   配合非唯一索引 `sessions(user_id, device)`，任一时刻每账号的每个设备桶至多一行。
+   `device` 只有 `pc` / `mobile` 两个字面量：`deviceOf(ua)` 命中
+   `/Android|iPhone|iPod|iPad|Windows Phone|HarmonyOS|Mobile|Tablet/i` 就是 `mobile`，其余（含空 UA）一律 `pc`。
 2. JWT payload 里带 `sid`，每个受保护请求都回表校验「行还在 / 没过期 / `token_hash` 对得上」。
    删掉那一行 token 立刻作废 —— 前端改 localStorage、改 cookie 都绕不过服务端。
 
@@ -122,8 +135,14 @@ curl -i -c /tmp/jy.txt -H 'content-type: application/json' \
   -d '{"email":"a@test.com","password":"password123","name":"甲"}' \
   http://127.0.0.1:3000/api/auth/register
 
-# 同一账号第二次登录：应 409 ALREADY_ONLINE
+# 同一账号在同一台设备上第二次登录：应 409 ALREADY_ONLINE（手机 + 电脑可以同时在线）
 curl -i -H 'content-type: application/json' \
+  -d '{"email":"a@test.com","password":"password123"}' \
+  http://127.0.0.1:3000/api/auth/login
+
+# 换一台设备登录：带上手机 UA，应 200
+curl -i -H 'content-type: application/json' \
+  -H 'user-agent: Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148' \
   -d '{"email":"a@test.com","password":"password123"}' \
   http://127.0.0.1:3000/api/auth/login
 

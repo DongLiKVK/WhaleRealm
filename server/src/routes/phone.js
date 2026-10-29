@@ -8,8 +8,8 @@
  * 1) 码只活 300 秒、只认最新一条（发新码就删旧码），错 5 次直接作废。
  * 2) 库里存 6 位明文码：它是短 TTL 的一次性凭据，做哈希对「库泄露」收益很低，
  *    却会让「码到底发出去没」的工单无从排查；真正要防的是撞码，靠 tries + TTL。
- * 3) 默认不回显码。SMS_DEV=1 时才在响应里带 devCode，供本地联调；
- *    接真实通道的位置就在下面 marked 的地方，换成 provider 调用即可。
+ * 3) 默认不回显码。provider=dev（或老的 SMS_DEV=1）时才在响应里带 devCode，供本地联调；
+ *    真实通道统一走 ../sms（腾讯云 / 阿里云 / webhook 网关），路由层只管「发没发出去」。
  */
 'use strict';
 
@@ -17,12 +17,20 @@ const crypto = require('crypto');
 const { db, now } = require('../db');
 const { requireAuth } = require('../auth');
 const { fail, rateLimitError, validPhone, maskPhone } = require('../http');
+const sms = require('../sms');
 
 const CODE_TTL = 300;    // 验证码有效期（秒）
 const COOLDOWN = 60;     // 前端按钮倒计时（秒）
 const CODE_TRIES = 5;    // 同一个码最多试错次数
 const CODE_LEN = 6;
 const CODE_RE = /^\d{6}$/;
+
+/* 短信通道到底通不通？判定全交给 ../sms —— 它知道自己这个 provider 缺哪些 env。
+   只有「配好了」才算通：provider=none、或 provider 选了但密钥缺一项，都算不通。
+   没接通时前端不该把用户拦在手机号认证页 —— 见 GET /config 与 js/app.js 的 gateRoute。 */
+function smsConfigured() {
+  return sms.usable();
+}
 
 /* ---------- 语句缓存 ---------- */
 /* 待验码按 (phone, user_id) 唯一，不按 phone 唯一。
@@ -115,24 +123,66 @@ async function routes(fastify) {
     const code = newCode();
     TXN_SEND(phone, code, req.user.id, ts, expiresAt);
 
-    // >>> 接真实短信通道就在这里：await sms.send(phone, code, 'verify') <<<
-    // 失败要回滚上面这次插入并返回 500，别把「没发出去」当成「已发送」。
-    if (process.env.SMS_DEV === '1') {
-      fastify.log.warn({ phone: maskPhone(phone) }, '[phone] devCode 回显（SMS_DEV=1）');
+    /* 把码交给短信通道。失败必须回滚刚才那行待验码，理由有两条：
+       1) 库里留着一条谁也收不到的码，等于给「撞码」白送 5 次机会（tries 是挂在码行上的）；
+       2) 用户看到「发送失败」却还能拿一条幽灵码继续试，状态会变得没法解释。 */
+    const devMode = sms.provider() === 'dev';
+    let delivery = { delivered: false, channel: 'none', id: '' };
+
+    if (devMode) {
+      // dev 不联网：码回显在响应里，日志里也留一份，方便后端同事对着看
+      delivery = { delivered: true, channel: 'dev', id: '' };
+      fastify.log.warn({ phone: maskPhone(phone), code }, '[phone] dev 通道：验证码回显（provider=dev）');
+    } else if (sms.usable()) {
+      try {
+        delivery = await sms.send({ phone: phone, code: code, ttl: CODE_TTL, scene: 'verify' });
+        fastify.log.info({ phone: maskPhone(phone), channel: delivery.channel, sid: delivery.id }, '[phone] 验证码已交给短信通道');
+      } catch (err) {
+        STMT.deleteCodesByPhone.run(phone, req.user.id);
+        fastify.log.error({
+          phone: maskPhone(phone),
+          provider: sms.provider(),
+          code: (err && err.code) || 'SMS_ERROR',
+          detail: (err && err.detail) || ''
+        }, '[phone] 短信发送失败：' + (err && err.message ? err.message : 'unknown'));
+        return fail(reply, 502, 'SMS_FAILED');
+      }
     } else {
-      fastify.log.info({ phone: maskPhone(phone) }, '[phone] 验证码已生成，等待接入短信通道');
+      fastify.log.warn({ phone: maskPhone(phone) }, '[phone] 未配置短信通道，验证码只写进日志');
     }
 
+    /* 这条码真的送到用户手机上了吗？只有 dev 通道（码回显在本页）或 provider 明确回「已受理」才算 true。
+       没接通道时必须如实告诉前端 delivered=false —— 否则页面提示「已发送」，用户等一条永远不会来的短信。 */
     const data = {
       // phone 是回显请求方自己刚提交的号码，不是从库里读出来的，不构成越权泄露；
       // 另给一份打码值，前端想直接贴到界面上时用这个。
       phone,
       phoneMasked: maskPhone(phone),
       ttl: CODE_TTL,
-      cooldown: COOLDOWN
+      cooldown: COOLDOWN,
+      delivered: delivery.delivered === true,
+      channel: delivery.channel
     };
-    if (process.env.SMS_DEV === '1') data.devCode = code;
+    if (devMode) data.devCode = code;
     return { ok: true, data };
+  });
+
+  // ---------------- 通道状态 ----------------
+  /* 前端要据此决定「手机号认证」到底是不是硬闸门：短信通道没接通时把人拦在认证页，
+     等于让用户对着一个永远不来的验证码等 —— 那是坏掉的体验，不是安全。
+     不挂 requireAuth：登录页/注册页也要能读到。 */
+  fastify.get('/config', async () => {
+    return {
+      ok: true,
+      data: {
+        smsEnabled: smsConfigured(),
+        // provider 也回给前端：出故障时一眼能看出「是通道没配」还是「通道拒收」
+        provider: sms.provider(),
+        devMode: sms.provider() === 'dev',
+        ttl: CODE_TTL,
+        cooldown: COOLDOWN
+      }
+    };
   });
 
   // ---------------- 校验验证码 ----------------
@@ -223,3 +273,4 @@ module.exports.CODE_TTL = CODE_TTL;
 module.exports.COOLDOWN = COOLDOWN;
 module.exports.CODE_TRIES = CODE_TRIES;
 module.exports.CODE_LEN = CODE_LEN;
+module.exports.smsConfigured = smsConfigured;

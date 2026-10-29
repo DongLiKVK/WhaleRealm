@@ -5,8 +5,9 @@
  * - JWT 只说明「这张票是谁签的」，真正的权威在 sessions 表：payload 里带 sid，
  *   每个受保护请求都按 sid 回表校验「行还在 / 没过期 / token_hash 对得上」。
  *   删掉那一行，token 立刻作废 —— 前端改 localStorage、改 cookie 都绕不过服务端。
- * - 单账号单会话：每次签发都在同一个事务里「先删该账号的旧行、再插新行」，
- *   任一时刻 sessions 里每个 user_id 最多一行。
+ * - 多端同时在线（v46）：会话按「设备桶」隔离 —— 手机一条、电脑一条，互不顶替；
+ *   同一设备重复登录仍然只留一行（事务里先删该 user+device 的旧行、再插新行）。
+ *   设备桶由 UA 判定（deviceOf），不信任前端传来的任何「我是手机」声明。
  * - requireAuth / optionalAuth 直接挂 preHandler，签名是 (req, reply)
  */
 'use strict';
@@ -16,9 +17,62 @@ const bcrypt = require('bcryptjs');
 const { db, now, publicUser } = require('./db');
 const { maskPhone } = require('./http');
 
+/* ---------- 库级迁移：单会话 → 每设备一条（v46） ----------
+   旧版本建了 sessions(user_id) 唯一索引，那是「同一时间只能一处登录」的硬约束。
+   现在要「网页 + 手机同时在线」，它必须先被拆掉 —— 不拆的话手机登录的 INSERT 会被
+   唯一约束直接从库里顶回来（SQLITE_CONSTRAINT_UNIQUE），表现是「验证码过了却登不上」。
+   换成的复合索引 (user_id, device) 故意不唯一：一个设备桶由应用层保证只有一行。
+   顺序有讲究：补 device 列 → 回填老行 → 建索引。
+   位置也有讲究：必须排在 STMT 之前 —— insertSession 的 SQL 里已经写了 device，
+   老库要是没这列，db.prepare 在模块加载阶段就会抛 SQLITE_ERROR: no such column。 */
+(function migrateSessionsToMultiDevice() {
+  try {
+    if (ensureColumn('sessions', 'device', "TEXT NOT NULL DEFAULT ''")) console.log('[auth] sessions 已补列：device');
+  } catch (err) {
+    console.warn('[auth] sessions 补列失败 device：' + err.message);
+  }
+
+  try {
+    db.exec('DROP INDEX IF EXISTS idx_sessions_one_per_user');
+  } catch (err) {
+    console.warn('[auth] 旧单会话索引删除失败（手机端可能登不上）：' + err.message);
+  }
+
+  try {
+    // 老行 device 是空的：按 UA 回填一次。不回填的话它们既不算 pc 也不算 mobile，
+    // 用户会在「已经登录」和「可以再登」之间反复横跳。
+    const stale = db.prepare("SELECT id, ua FROM sessions WHERE device = '' OR device IS NULL").all();
+    const upd = db.prepare('UPDATE sessions SET device = ? WHERE id = ?');
+    for (const r of stale) upd.run(deviceOf(r.ua), r.id);
+    if (stale.length) console.log('[auth] sessions 回填 device：' + stale.length + ' 行');
+  } catch (err) {
+    console.warn('[auth] sessions 回填 device 失败：' + err.message);
+  }
+
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user_device ON sessions(user_id, device)');
+  } catch (err) {
+    console.warn('[auth] sessions(user_id, device) 索引建立失败，退化为全表扫描：' + err.message);
+  }
+})();
+
 const BCRYPT_ROUNDS = 10;
 const COOKIE_NAME = 'jingyu_token';
 const JWT_EXPIRES = Number(process.env.JWT_EXPIRES || 604800); // 秒，默认 7 天
+
+/* ---------- 设备桶：同一个人可以「电脑 + 手机」各一条会话 ---------- */
+const DEVICES = ['pc', 'mobile'];
+
+/**
+ * UA → 设备桶。只分两档，够用且不会因为 UA 改版就多出一堆空桶。
+ * iPad 归进 mobile：它跟手机一样是「另一个屏幕」，不该和台式机抢同一个桶。
+ * 拿不到 UA 时归 pc：老客户端 cookies+Authorization 头也能登录，不能因此判成手机。
+ */
+function deviceOf(ua) {
+  const s = typeof ua === 'string' ? ua : '';
+  if (/Android|iPhone|iPod|iPad|Windows Phone|HarmonyOS|Mobile|Tablet/i.test(s)) return 'mobile';
+  return 'pc';
+}
 
 const SID_BYTES = 16;            // 128 位随机 sid，放进 JWT
 const SID_RE = /^[0-9a-f]{32}$/; // 只认 32 位小写十六进制
@@ -31,14 +85,18 @@ const SID_ATTEMPTS = 3;          // 行号撞车时重抽（概率 ~2^-48，纯�
 const STMT = {
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   sessionById: db.prepare('SELECT * FROM sessions WHERE id = ?'),
-  sessionByUser: db.prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY id DESC LIMIT 1'),
+  /* 登录时的「是不是已经在线」按设备桶判：手机登录不该被电脑上那条挡下来 */
+  sessionByUserDevice: db.prepare('SELECT * FROM sessions WHERE user_id = ? AND device = ? ORDER BY id DESC LIMIT 1'),
+  sessionsByUser: db.prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at DESC'),
   insertSession: db.prepare(`
-    INSERT INTO sessions (id, user_id, token_hash, ua, ip, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, user_id, token_hash, ua, ip, device, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `),
   deleteSessionById: db.prepare('DELETE FROM sessions WHERE id = ?'),
   deleteSessionByHash: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
-  deleteSessionsByUser: db.prepare('DELETE FROM sessions WHERE user_id = ?')
+  deleteSessionsByUser: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
+  deleteSessionsByUserDevice: db.prepare('DELETE FROM sessions WHERE user_id = ? AND device = ?'),
+  deleteSessionByIdForUser: db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?')
 };
 
 /**
@@ -46,27 +104,9 @@ const STMT = {
  * 事务保证了「行数恒 <= 1」不会出现中间态（better-sqlite3 是同步的，事务内不会让出事件循环）。
  */
 const TXN_ISSUE = db.transaction((row) => {
-  if (row.replace) STMT.deleteSessionsByUser.run(row.user_id);
-  STMT.insertSession.run(row.id, row.user_id, row.token_hash, row.ua, row.ip, row.expires_at, row.created_at);
+  if (row.replace) STMT.deleteSessionsByUserDevice.run(row.user_id, row.device);
+  STMT.insertSession.run(row.id, row.user_id, row.token_hash, row.ua, row.ip, row.device, row.expires_at, row.created_at);
 });
-
-/* ---------- 库级兜底：sessions.user_id 唯一 ----------
-   应用层靠「事务内先删后插」保证每个账号至多一行；这里再给它加一条数据库唯一索引，
-   就算将来谁绕过 createSession 直接写库，也插不进第二行。
-   老库若已有多行（旧版本遗留），先只留最新一行再建索引；任何失败都吞掉，
-   绝不因为这一条索引让服务起不来。 */
-(function enforceSingleSessionPerUser() {
-  try {
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_per_user ON sessions(user_id)');
-  } catch {
-    try {
-      db.exec('DELETE FROM sessions WHERE id NOT IN (SELECT MAX(id) FROM sessions GROUP BY user_id)');
-      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_per_user ON sessions(user_id)');
-    } catch (err) {
-      console.warn('[auth] sessions(user_id) 唯一索引建立失败，单会话约束仅由应用层保证：' + err.message);
-    }
-  }
-})();
 
 /* ---------- 库级兜底：老库补列 ----------
    schema.sql 里全是 CREATE TABLE IF NOT EXISTS，对已经存在的 users 表它不会加列，
@@ -136,6 +176,7 @@ function sessionView(s, sid) {
   return {
     sid: x.sid || sid || '',
     ua: x.ua || '',
+    device: x.device || deviceOf(x.ua || ''),
     createdAt: x.createdAt || x.created_at || 0,
     expiresAt: x.expiresAt || x.expires_at || 0
   };
@@ -171,8 +212,9 @@ async function verifyPassword(plain, hash) {
 /**
  * 开一条新会话：生成 sid → 签 token → 算 hash → 落库 → 写 cookie。
  * 顺序是刻意的：签名在前、插入在后，任何一步抛错都不会在表里留下没有 token 的孤儿行。
- * opts: { ua, ip, replace }，replace 默认 true（顶掉该账号已有的会话）。
- * 返回 { sid, token, hash, ua, ip, createdAt, expiresAt }
+ * opts: { ua, ip, device, replace }，replace 默认 true（顶掉**同一设备**上已有的会话）。
+ * device 不传就按 UA 推；传了也只认 'pc' / 'mobile' 两个字面量（防前端塞脏值）。
+ * 返回 { sid, token, hash, ua, ip, device, createdAt, expiresAt }
  */
 function createSession(fastify, reply, req, user, opts) {
   const o = opts || {};
@@ -183,6 +225,7 @@ function createSession(fastify, reply, req, user, opts) {
   const rawIp = o.ip !== undefined ? o.ip : (req ? req.ip : '');
   const ua = clip(rawUa, UA_MAX);
   const ip = clip(rawIp, IP_MAX);
+  const device = DEVICES.indexOf(o.device) >= 0 ? o.device : deviceOf(ua);
   const replace = o.replace !== false;
 
   let sid = '';
@@ -200,6 +243,7 @@ function createSession(fastify, reply, req, user, opts) {
         token_hash: hash,
         ua,
         ip,
+        device,
         expires_at: expiresAt,
         created_at: ts,
         replace
@@ -216,7 +260,7 @@ function createSession(fastify, reply, req, user, opts) {
   }
 
   setTokenCookie(reply, token);
-  return { sid, token, hash, ua, ip, createdAt: ts, expiresAt };
+  return { sid, token, hash, ua, ip, device, createdAt: ts, expiresAt };
 }
 
 /**
@@ -280,16 +324,29 @@ function revokeSession(req) {
   return changed;
 }
 
-/** 撤销某个用户的全部会话（改密、封号、顶替登录时用） */
+/** 撤销某个用户的全部会话（改密、封号、账号级踢下线时用） */
 function revokeAllForUser(userId) {
   if (!userId) return 0;
   return STMT.deleteSessionsByUser.run(userId).changes;
 }
 
-/** 该用户当前还有没有活着的会话：{ id, ua, ip, created_at, expires_at } 或 null */
-function liveSessionFor(userId) {
+/** 只撤销某个设备桶的会话（同设备重新登录时用，另一台设备不受影响） */
+function revokeDeviceForUser(userId, device) {
+  if (!userId) return 0;
+  const bucket = DEVICES.indexOf(device) >= 0 ? device : deviceOf('');
+  return STMT.deleteSessionsByUserDevice.run(userId, bucket).changes;
+}
+
+/**
+ * 该用户在这个设备桶里还有没有活着的会话：
+ * { id, ua, ip, device, created_at, expires_at } 或 null。
+ * 不传 device 就按「手机 UA」之外的桶查？—— 不，调用方必须明确要哪个桶；
+ * 传空时按 pc 查，与 deviceOf('') 的兜底保持一致。
+ */
+function liveSessionFor(userId, device) {
   if (!userId) return null;
-  const row = STMT.sessionByUser.get(userId);
+  const bucket = DEVICES.indexOf(device) >= 0 ? device : deviceOf('');
+  const row = STMT.sessionByUserDevice.get(userId, bucket);
   if (!row) return null;
   if (row.expires_at <= now()) {
     STMT.deleteSessionById.run(row.id);
@@ -299,9 +356,53 @@ function liveSessionFor(userId) {
     id: row.id,
     ua: row.ua,
     ip: row.ip,
+    device: row.device || bucket,
     created_at: row.created_at,
     expires_at: row.expires_at
   };
+}
+
+/**
+ * 该用户所有还活着的会话（设置页「登录设备」用）。
+ * 顺手把过期行删掉：列表里出现「已过期但不消失」的设备比不列还糟。
+ * sid 只回前 8 位（用来指定「退出那一台」），完整 sid 只在各自浏览器的 token 里。
+ */
+function sessionsForUser(userId, currentSid) {
+  if (!userId) return [];
+  const rows = STMT.sessionsByUser.all(userId);
+  const ts = now();
+  const out = [];
+  for (const row of rows) {
+    if (row.expires_at <= ts) {
+      STMT.deleteSessionById.run(row.id);
+      continue;
+    }
+    const sid = typeof row.id === 'number' ? row.id.toString(16).padStart(12, '0') : '';
+    out.push({
+      key: sid.slice(0, 8),
+      device: row.device || deviceOf(row.ua),
+      ua: row.ua || '',
+      ip: row.ip || '',
+      /* created_at / expires_at 在库里本来就是 Unix 秒（db.now()），别再除 1000 ——
+         除一次会变成 1970 年的日期，前端还会一本正经地渲染出来。 */
+      createdAt: Number(row.created_at) || 0,
+      expiresAt: Number(row.expires_at) || 0,
+      current: !!currentSid && row.id === sessionIdOf(currentSid)
+    });
+  }
+  return out;
+}
+
+/** 退出「另一台设备」：按短 key 定位，且必须属于这个 user（防越权注销别人的会话） */
+function revokeSessionByKey(userId, key) {
+  if (!userId || typeof key !== 'string' || !/^[0-9a-f]{8}$/.test(key)) return 0;
+  const rows = STMT.sessionsByUser.all(userId);
+  let n = 0;
+  for (const row of rows) {
+    const sid = typeof row.id === 'number' ? row.id.toString(16).padStart(12, '0') : '';
+    if (sid.slice(0, 8) === key) n += STMT.deleteSessionByIdForUser.run(row.id, userId).changes;
+  }
+  return n;
 }
 
 /**
@@ -334,6 +435,16 @@ function currentUser(req) {
   if (!s) return null;
   const row = STMT.userById.get(s.user_id);
   if (!row) return null;
+  /* 被后台禁用的账号一律当未登录处理，并把会话行删掉。
+     为什么每个请求都查 status 而不是只在登录时判一次：禁用发生在登录之后，
+     已经登录的标签页会一直拿着旧 cookie 刷接口，不逐请求回表的话「禁用」对
+     正在用的人等于没生效。删行是顺手清垃圾，删失败也不该影响这次判定。 */
+  if (row.status === 'disabled') {
+    try {
+      STMT.deleteSessionsByUser.run(row.id);
+    } catch { /* 会话表写失败时仍然按未登录返回 */ }
+    return null;
+  }
   req.user = row;
   req.session = s;
   return row;
@@ -365,6 +476,9 @@ function userView(row) {
   const raw = row && typeof row.phone === 'string' ? row.phone : '';
   u.phoneMasked = maskPhone(raw);
   u.phoneVerified = !!(row && row.phone_verified === 1);
+  /* 邮箱只出现在这里：userView 仅用于「本人的」注册/登录/me 三个响应，
+     公共列表走的是 publicUser()，所以不会把别人的邮箱带出去。 */
+  u.email = row && typeof row.email === 'string' ? row.email : '';
   return u;
 }
 
@@ -387,7 +501,12 @@ module.exports = {
   findSession,
   revokeSession,
   revokeAllForUser,
+  revokeDeviceForUser,
+  revokeSessionByKey,
   liveSessionFor,
+  sessionsForUser,
+  deviceOf,
+  DEVICES,
   sessionView,
   sessionIdOf,
   userView,
