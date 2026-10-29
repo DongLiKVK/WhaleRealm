@@ -1,0 +1,12 @@
+[Unit]
+Description=鲸域防护守卫（access.log 增量巡检 + 自动切档）
+Documentation=file:///opt/jingyu-defense/README.md
+After=network-online.target nginx.service
+Wants=nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/jingyu-defense-guard
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

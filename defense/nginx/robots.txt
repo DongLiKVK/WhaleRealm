@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /$
+Allow: /assets/
+Allow: /whale/
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /admin

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04070b">
+<script>document.documentElement.classList.add('js');</script>
+<meta name="description" content="鲸域 WHALE DOMAIN —— 深海开发者聚落。把代码沉到海面以下，让作品拥有 11,000 米的压强。">
+<title>鲸域 · WHALE DOMAIN — 深海开发者聚落</title>
+<link rel="icon" href="assets/brand-mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/motion.css">
+</head>
+<body>
+
+<!-- 全局颗粒 / 扫描线叠层 -->
+<div class="fx-grain" aria-hidden="true"></div>
+<div class="fx-vignette" aria-hidden="true"></div>
+
+<!-- 自定义光标 -->
+<div class="cursor" id="cursor" aria-hidden="true">
+  <div class="cursor__dot"></div>
+  <div class="cursor__ring"><span class="cursor__label" id="cursorLabel"></span></div>
+</div>
+
+<!-- 首屏加载：声呐校准 -->
+<div class="loader" id="loader" aria-hidden="true">
+  <div class="loader__grid">
+    <span class="loader__brand">鲸域 <i>WHALE DOMAIN</i></span>
+    <span class="loader__depth"><b id="loaderNum">00000</b> M</span>
+  </div>
+  <div class="loader__bar"><span id="loaderBar"></span></div>
+  <div class="loader__foot">
+    <span>CALIBRATING SONAR</span>
+    <span id="loaderStatus">连接深海…</span>
+  </div>
+</div>
+
+<!-- 顶部滚动进度 -->
+<div class="scrollbar" aria-hidden="true"><span id="scrollProgress"></span></div>
+
+<header class="hdr" id="hdr">
+  <a class="hdr__brand" href="#top" data-cursor="link" aria-label="鲸域 首页">
+    <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r="15.6" fill="none" stroke="currentColor" stroke-width="1.1"/>
+      <path d="M5.2 19.4h29.6" stroke="currentColor" stroke-width="1.1" opacity=".75"/>
+      <path d="M20 28.6c-3.1-2.2-5.4-5.2-6.6-9.2 2.6 1.1 4.8 2.9 6.6 5.4 1.8-2.5 4-4.3 6.6-5.4-1.2 4-3.5 7-6.6 9.2Z" fill="currentColor"/>
+      <circle cx="20" cy="7.6" r="1.15" fill="currentColor" opacity=".8"/>
+    </svg>
+    <span class="hdr__word">鲸域</span>
+    <span class="hdr__latin">WHALE&nbsp;DOMAIN</span>
+  </a>
+
+  <nav class="hdr__nav" aria-label="主导航">
+    <a href="#manifesto" data-cursor="link"><i>01</i>潮汐</a>
+    <a href="#services" data-cursor="link"><i>02</i>礁岩</a>
+    <a href="#archive" data-cursor="link"><i>03</i>档案</a>
+    <a href="#path" data-cursor="link"><i>04</i>路径</a>
+  </nav>
+
+  <div class="hdr__right">
+    <span class="clock" id="clock">--:--:-- CST</span>
+    <button class="sound" id="soundToggle" type="button" aria-pressed="false" data-cursor="link">
+      <span class="sound__bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="sound__txt">声场关闭</span>
+    </button>
+    <a class="btn btn--ghost btn--sm" href="#contact" data-cursor="link" data-magnetic>
+      <span>进入深海</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+    </a>
+  </div>
+</header>
+
+<!-- 左侧竖向导轨 -->
+<aside class="rail rail--left" aria-hidden="true">
+  <span class="rail__rot">深海 · 鲸域 · DEEP SEA HABITAT</span>
+  <span class="rail__line"></span>
+  <span class="rail__meta">EST. 2026</span>
+</aside>
+
+<!-- 右侧深度计 -->
+<aside class="rail rail--right" id="depthRail" aria-hidden="true">
+  <div class="depth">
+    <div class="depth__num"><span id="depthValue">0</span><i>M</i></div>
+    <div class="depth__zone" id="depthZone">海面 SURFACE</div>
+    <div class="depth__track">
+      <span class="depth__fill" id="depthFill"></span>
+      <span class="depth__dot" id="depthDot"></span>
+      <span class="depth__tick" style="--p:0%"></span>
+      <span class="depth__tick" style="--p:22%"></span>
+      <span class="depth__tick" style="--p:45%"></span>
+      <span class="depth__tick" style="--p:68%"></span>
+      <span class="depth__tick" style="--p:92%"></span>
+    </div>
+    <div class="depth__scale"><span>0</span><span>11K</span></div>
+  </div>
+</aside>
+
+<main id="page">
+
+  <!-- ============ 01 主视觉 ============ -->
+  <section class="hero" id="top">
+    <canvas class="hero__canvas" id="heroCanvas" aria-hidden="true"></canvas>
+    <div class="hero__fallback" aria-hidden="true"></div>
+    <div class="hero__ghost" aria-hidden="true">11000</div>
+
+    <div class="hero__ring" aria-hidden="true">
+      <svg viewBox="0 0 600 600">
+        <circle cx="300" cy="300" r="299" fill="none" stroke="currentColor" stroke-width="1" opacity=".22"/>
+        <circle cx="300" cy="300" r="238" fill="none" stroke="currentColor" stroke-width="1" opacity=".12" stroke-dasharray="2 10"/>
+        <circle cx="300" cy="300" r="170" fill="none" stroke="currentColor" stroke-width="1" opacity=".16"/>
+      </svg>
+    </div>
+
+    <div class="hero__inner wrap">
+      <div class="hero__kicker" data-reveal style="--i:0">
+        <span class="dot-pulse"></span>
+        <span>深海开发者聚落</span>
+        <span class="hero__kicker-en">DEEP-SEA HABITAT FOR MAKERS</span>
+      </div>
+
+      <h1 class="hero__title">
+        <span class="split-line"><span class="hero__cjk" data-split="char">鲸域</span></span>
+      </h1>
+
+      <div class="hero__latin" aria-label="Whale Domain">
+        <span class="split-line"><span data-split="char">WHALE</span></span>
+        <span class="split-line hero__latin-b"><span data-split="char">DOMAIN</span></span>
+        <span class="hero__latin-meta">/ 11,000 M BELOW /</span>
+      </div>
+
+      <p class="hero__lead" data-reveal style="--i:5">
+        把代码沉到海面以下。<br>
+        让作品，拥有 11,000 米的压强。
+      </p>
+
+      <div class="hero__actions" data-reveal style="--i:6">
+        <a class="btn btn--solid" href="#manifesto" data-cursor="link" data-magnetic>
+          <span>开始下潜</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v10M3.6 8.2 8 12.6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </a>
+        <button class="btn btn--text" type="button" id="sonarBtn" data-cursor="link">
+          <span class="sonar-wave" aria-hidden="true"></span>
+          <span>听一段声呐</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hero__hud" data-reveal style="--i:7">
+      <div class="hud__cell"><i>LAT / LON</i><span>31.2304° N&nbsp;&nbsp;121.4737° E</span></div>
+      <div class="hud__cell"><i>WATER TEMP</i><span>2.4 °C</span></div>
+      <div class="hud__cell"><i>PRESSURE</i><span>1,102 BAR</span></div>
+      <div class="hud__cell hud__cell--sonar"><i>SONAR</i>
+        <span class="sonar-lines" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b></span>
+        <span class="hud__ok">ONLINE</span>
+      </div>
+    </div>
+
+    <a class="hero__scroll" href="#manifesto" data-cursor="link" aria-label="向下滚动">
+      <svg class="badge-rot" viewBox="0 0 120 120" aria-hidden="true">
+        <defs><path id="circlePath" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0"/></defs>
+        <text><textPath href="#circlePath" startOffset="0">SCROLL TO DIVE · 向下下潜 · WHALE DOMAIN · </textPath></text>
+      </svg>
+      <span class="hero__scroll-arrow" aria-hidden="true">
+        <svg viewBox="0 0 16 24"><path d="M8 1v20M2 15l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </span>
+    </a>
+  </section>
+
+  <!-- ============ 跑马灯 ============ -->
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker__row">
+      <span>鲸域 · WHALE DOMAIN</span><b>◆</b><span>深海开发者聚落</span><b>◆</b><span>零算法 · 纯时间线</span><b>◆</b><span>326 块礁岩</span><b>◆</b><span>11,000 M</span><b>◆</b>
+      <span>鲸域 · WHALE DOMAIN</span><b>◆</b><span>深海开发者聚落</span><b>◆</b><span>零算法 · 纯时间线</span><b>◆</b><span>326 块礁岩</span><b>◆</b><span>11,000 M</span><b>◆</b>
+    </div>
+  </div>
+
+  <!-- ============ 02 宣言 ============ -->
+  <section class="manifesto section" id="manifesto">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-head__idx">01</span>
+        <span class="sec-head__line"></span>
+        <span class="sec-head__label">为什么在深海 / WHY SO DEEP</span>
+        <span class="sec-head__depth">220 M · 暮光带</span>
+      </div>
+
+      <div class="manifesto__grid">
+        <div class="manifesto__main">
+          <p class="statement" data-split="char">海面之上，人人都在喊。<br>海面之下，只有信号。</p>
+          <div class="manifesto__body" data-reveal>
+            <p>鲸域是一个给创作者与工程师的深海栖居地。没有热搜，没有推荐算法，没有谁比谁更响。只有你写下的东西，和真正听见它的人。</p>
+            <p>我们把动态流、插件库、实时聊天与个人空间，沉进同一片水域——让协作像洋流一样自然发生，而不是像集市一样喧哗。</p>
+          </div>
+          <div class="manifesto__sign" data-reveal>
+            <span class="manifesto__sig">鲸落之后，万物生长。</span>
+            <span class="manifesto__who">— 鲸域 2026 年刊</span>
+          </div>
+        </div>
+
+        <aside class="manifesto__aside" data-reveal style="--i:2">
+          <div class="mq-item"><span class="mq-num" data-count="12480" data-suffix="">0</span><i>潜行者 / DIVERS</i></div>
+          <div class="mq-item"><span class="mq-num" data-count="326">0</span><i>礁岩插件 / PLUGINS</i></div>
+          <div class="mq-item"><span class="mq-num" data-count="1240000" data-format="compact">0</span><i>声呐消息 / MESSAGES</i></div>
+          <p class="mq-note">* 数据每小时由潮汐更新。没有广告位，也没有增长黑客。</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 产品 / 服务 ============ -->
+  <section class="services section" id="services">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-head__idx">02</span>
+        <span class="sec-head__line"></span>
+        <span class="sec-head__label">四片水域 / FOUR WATERS</span>
+        <span class="sec-head__depth">1,000 M · 午夜带</span>
+      </div>
+
+      <div class="services__top">
+        <h2 class="display" data-split="char">在水下，<br>工具应该安静。</h2>
+        <p class="services__intro" data-reveal>四件基础工具，覆盖一个开发者从「写下」到「被听见」的全部路径。悬停查看每一片水域。</p>
+      </div>
+
+      <div class="svc" id="svcList" data-reveal>
+        <article class="svc__row" data-svc="tide" data-cursor="link">
+          <span class="svc__idx">01</span>
+          <div class="svc__name"><h3>潮汐</h3><i>TIDE</i></div>
+          <p class="svc__desc">更新日志与动态流。每一次提交都会推起一道潮水，纯时间倒序，零算法。</p>
+          <span class="svc__tag">FEED</span>
+          <span class="svc__arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20 20 4M9 4h11v11" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        </article>
+
+        <article class="svc__row" data-svc="reef" data-cursor="link">
+          <span class="svc__idx">02</span>
+          <div class="svc__name"><h3>礁岩</h3><i>REEF</i></div>
+          <p class="svc__desc">326 块礁石托住你的工作流：可搜索、可标注、可订阅的插件与条目库。</p>
+          <span class="svc__tag">LIBRARY</span>
+          <span class="svc__arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20 20 4M9 4h11v11" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        </article>
+
+        <article class="svc__row" data-svc="sonar" data-cursor="link">
+          <span class="svc__idx">03</span>
+          <div class="svc__name"><h3>声呐</h3><i>SONAR</i></div>
+          <p class="svc__desc">低频、慢速、不打断。深夜三点丢下一句牢骚，也总有人回你。</p>
+          <span class="svc__tag">CHAT</span>
+          <span class="svc__arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20 20 4M9 4h11v11" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        </article>
+
+        <article class="svc__row" data-svc="dive" data-cursor="link">
+          <span class="svc__idx">04</span>
+          <div class="svc__name"><h3>深潜</h3><i>DIVE</i></div>
+          <p class="svc__desc">个人空间即潜水日志：谁来过、留下什么、你在哪一层水。</p>
+          <span class="svc__tag">SPACE</span>
+          <span class="svc__arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20 20 4M9 4h11v11" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></span>
+        </article>
+      </div>
+    </div>
+
+    <!-- 跟随光标的预览卡 -->
+    <div class="svc-preview" id="svcPreview" aria-hidden="true">
+      <div class="svc-preview__art" id="svcArt">
+        <span class="svc-preview__glyph" id="svcGlyph">潮</span>
+        <span class="svc-preview__scan"></span>
+      </div>
+      <div class="svc-preview__meta">
+        <span id="svcMetaEn">TIDE / 01</span>
+        <span id="svcMetaZh">声呐回波 · 实时</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 潮汐档案（横向滚动） ============ -->
+  <section class="archive" id="archive">
+    <div class="archive__sticky">
+      <div class="archive__head wrap">
+        <div class="sec-head sec-head--tight">
+          <span class="sec-head__idx">03</span>
+          <span class="sec-head__line"></span>
+          <span class="sec-head__label">潮汐档案 / TIDE ARCHIVE</span>
+          <span class="sec-head__depth">4,000 M · 深渊带</span>
+        </div>
+        <div class="archive__headline">
+          <h2 class="display display--sm">海沟里的<br>五件作品。</h2>
+          <div class="archive__meta">
+            <span id="archiveCounter">01 / 05</span>
+            <span class="archive__hint">滚动 → 横移</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="archive__viewport">
+        <div class="archive__track" id="archiveTrack">
+          <article class="card" data-art="1" data-cursor="view">
+            <div class="card__art"><span class="card__no">001</span><span class="card__wave"></span></div>
+            <div class="card__foot">
+              <h3>深蓝档案</h3>
+              <span class="card__en">ABYSS ARCHIVE</span>
+              <span class="card__yr">2026</span>
+            </div>
+            <p class="card__desc">为一个海洋研究所做的可视化档案：3.2 万条采样，一条时间轴。</p>
+          </article>
+
+          <article class="card" data-art="2" data-cursor="view">
+            <div class="card__art"><span class="card__no">002</span><span class="card__wave"></span></div>
+            <div class="card__foot">
+              <h3>白噪音海岸</h3>
+              <span class="card__en">WHITE NOISE COAST</span>
+              <span class="card__yr">2025</span>
+            </div>
+            <p class="card__desc">用 WebAudio 合成的潮线，随访客的心率改变节奏。</p>
+          </article>
+
+          <article class="card" data-art="3" data-cursor="view">
+            <div class="card__art"><span class="card__no">003</span><span class="card__wave"></span></div>
+            <div class="card__foot">
+              <h3>鲸落</h3>
+              <span class="card__en">WHALE FALL</span>
+              <span class="card__yr">2025</span>
+            </div>
+            <p class="card__desc">一个会慢慢沉没的页面。你停留越久，它沉得越深。</p>
+          </article>
+
+          <article class="card" data-art="4" data-cursor="view">
+            <div class="card__art"><span class="card__no">004</span><span class="card__wave"></span></div>
+            <div class="card__foot">
+              <h3>声呐诗</h3>
+              <span class="card__en">SONAR POEM</span>
+              <span class="card__yr">2024</span>
+            </div>
+            <p class="card__desc">把社区夜里的句子，用回声延迟拼成一首不断生长的诗。</p>
+          </article>
+
+          <article class="card" data-art="5" data-cursor="view">
+            <div class="card__art"><span class="card__no">005</span><span class="card__wave"></span></div>
+            <div class="card__foot">
+              <h3>冷水机组</h3>
+              <span class="card__en">COLD CURRENT</span>
+              <span class="card__yr">2024</span>
+            </div>
+            <p class="card__desc">给一个独立硬件团队做的产品叙事，全站只有 14 KB。</p>
+          </article>
+
+          <article class="card card--end" data-cursor="link">
+            <div class="card__end">
+              <span class="card__end-k">还有 321 件</span>
+              <a class="card__end-link" href="#contact">进入档案库 <svg viewBox="0 0 24 24"><path d="M4 20 20 4M9 4h11v11" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></a>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="archive__foot wrap">
+        <span class="archive__prog"><span id="archiveProg"></span></span>
+        <span class="archive__note">横移由滚动驱动 / SCROLL-DRIVEN</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 深潜路径 ============ -->
+  <section class="path section" id="path">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-head__idx">04</span>
+        <span class="sec-head__line"></span>
+        <span class="sec-head__label">深潜路径 / DESCENT</span>
+        <span class="sec-head__depth">8,000 M · 深渊带</span>
+      </div>
+
+      <div class="path__grid">
+        <div class="path__left">
+          <h2 class="display" data-split="char">四步，<br>抵达海底。</h2>
+          <p data-reveal>不需要简历，不需要面试。你只需要交出第一段代码，然后等回声。</p>
+          <a class="btn btn--solid btn--sm" href="#contact" data-cursor="link" data-magnetic><span>领取潜航证</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+          </a>
+        </div>
+
+        <ol class="path__list">
+          <li class="path__item" data-reveal>
+            <span class="path__n">01</span>
+            <div><h3>注册一具身份</h3><p>一个昵称、一枚头像、一层默认水层。三十秒，不需要邮箱验证码。</p></div>
+            <span class="path__state">READY</span>
+          </li>
+          <li class="path__item" data-reveal style="--i:1">
+            <span class="path__n">02</span>
+            <div><h3>选择你的水层</h3><p>前端、后端、模型、硬件、绘画——水层决定你默认听见谁。</p></div>
+            <span class="path__state">6 层</span>
+          </li>
+          <li class="path__item" data-reveal style="--i:2">
+            <span class="path__n">03</span>
+            <div><h3>交出第一段代码</h3><p>贴一段脚本、一个截图、一条踩坑记录。潮汐会替你记住它。</p></div>
+            <span class="path__state">∞</span>
+          </li>
+          <li class="path__item" data-reveal style="--i:3">
+            <span class="path__n">04</span>
+            <div><h3>听见回声</h3><p>有人 star，有人提问，有人在三年后引用它。这就是深海的意义。</p></div>
+            <span class="path__state">ECHO</span>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 页脚 ============ -->
+  <footer class="ftr" id="contact">
+    <div class="ftr__marquee" aria-hidden="true">
+      <div class="ftr__marquee-row">
+        <span>LET'S DIVE</span><b>一起下潜</b><span>LET'S DIVE</span><b>一起下潜</b>
+        <span>LET'S DIVE</span><b>一起下潜</b><span>LET'S DIVE</span><b>一起下潜</b>
+      </div>
+    </div>
+
+    <div class="wrap ftr__grid">
+      <div class="ftr__cta">
+        <p class="ftr__kicker">11,000 M · 超深渊带 / HADAL ZONE</p>
+        <h2 class="ftr__title">写点什么，<br>然后沉下来。</h2>
+        <a class="ftr__mail" href="mailto:hello@whale.domain" data-cursor="link" data-magnetic>
+          hello@whale.domain
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+        </a>
+      </div>
+
+      <div class="ftr__cols">
+        <div class="ftr__col">
+          <h4>水域</h4>
+          <a href="#services">潮汐 TIDE</a>
+          <a href="#services">礁岩 REEF</a>
+          <a href="#services">声呐 SONAR</a>
+          <a href="#services">深潜 DIVE</a>
+        </div>
+        <div class="ftr__col">
+          <h4>社群</h4>
+          <a href="#archive">潮汐档案</a>
+          <a href="#path">深潜路径</a>
+          <a href="#manifesto">关于鲸域</a>
+          <a href="#top">行为准则</a>
+        </div>
+        <div class="ftr__col">
+          <h4>信号</h4>
+          <a href="#top">GitHub</a>
+          <a href="#top">Telegram</a>
+          <a href="#top">RSS 订阅</a>
+          <a href="#top">状态页</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap ftr__bar">
+      <span>© 2026 鲸域 WHALE DOMAIN</span>
+      <span class="ftr__mid">在 31.2304° N / 121.4737° E 的深水里</span>
+      <span class="ftr__time"><i id="ftrClock">--:--:--</i> CST</span>
+      <a class="ftr__top" href="#top" data-cursor="link">回到海面 ↑</a>
+    </div>
+
+    <div class="ftr__watermark" aria-hidden="true">鲸域</div>
+  </footer>
+</main>
+
+<noscript>
+  <div class="noscript">本页的交互动效需要启用 JavaScript；内容与排版在无脚本下依然可读。</div>
+</noscript>
+
+<script src="js/core.js" defer></script>
+<script src="js/hero-shader.js" defer></script>
+<script src="js/cursor.js" defer></script>
+<script src="js/reveals.js" defer></script>
+<script src="js/services.js" defer></script>
+<script src="js/archive.js" defer></script>
+<script src="js/counters.js" defer></script>
+<script src="js/sound.js" defer></script>
+<script src="js/main.js" defer></script>
+</body>
+</html>

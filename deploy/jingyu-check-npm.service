@@ -1,0 +1,17 @@
+[Unit]
+Description=鲸域 · 条目 npm 包名核对（plugin_npm）
+Documentation=https://whalerealm.top
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jingyu
+Group=jingyu
+WorkingDirectory=/var/www/jingyu/server
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:/var/www/jingyu/logs/check-npm.log
+StandardError=append:/var/www/jingyu/logs/check-npm.log
+ExecStart=/usr/bin/node scripts/check-npm.js --concurrency=24 --log-every=1000
+TimeoutStartSec=1800

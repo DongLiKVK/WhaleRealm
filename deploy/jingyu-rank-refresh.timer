@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh WhaleRealm AI ranking snapshots every day at 00:00 Asia/Shanghai
+
+[Timer]
+# 服务器本地时区是 UTC；这里显式写 Asia/Shanghai，00:00 即 UTC 16:00。
+OnCalendar=*-*-* 00:00:00 Asia/Shanghai
+# 停机错过的当天任务，开机后补跑一次
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=jingyu-rank-refresh.service
+
+[Install]
+WantedBy=timers.target

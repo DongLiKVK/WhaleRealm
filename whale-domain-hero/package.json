@@ -1,0 +1,20 @@
+{
+  "name": "whale-domain-hero",
+  "version": "1.0.0",
+  "private": true,
+  "description": "鲸域 WHALE DOMAIN 品牌首页 Demo —— 深海开发者聚落",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "preview": "node server.mjs 4174"
+  },
+  "keywords": [
+    "landing-page",
+    "webgl",
+    "canvas",
+    "scroll-animation",
+    "brand"
+  ],
+  "license": "MIT"
+}

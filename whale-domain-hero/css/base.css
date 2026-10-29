@@ -1,0 +1,132 @@
+/* =========================================================
+   base.css — 设计变量 / 重置 / 排版基座
+   鲸域 WHALE DOMAIN · homepage demo
+   ========================================================= */
+
+:root{
+  /* 色板：深海黑 + 生物荧光青 + 墨白 */
+  --bg:            #04070b;
+  --bg-soft:       #070c13;
+  --bg-panel:      #0a1119;
+  --ink:           #f1eee5;
+  --ink-2:         #cfd6d8;
+  --ink-dim:       #8d9aa3;
+  --ink-faint:     #5a6873;
+  --line:          rgba(241,238,229,.13);
+  --line-2:        rgba(241,238,229,.26);
+  --cyan:          #4defd1;
+  --cyan-soft:     rgba(77,239,209,.35);
+  --cyan-ghost:    rgba(77,239,209,.08);
+  --amber:         #e6b071;
+
+  /* 字体：Bahnschrift 是 Windows 自带的 DIN 系技术字，无需联网 */
+  --font-display: "Bahnschrift","DIN Alternate","Helvetica Neue",Arial,
+                  "Microsoft YaHei UI","PingFang SC","Noto Sans SC",sans-serif;
+  --font-cjk:     "Microsoft YaHei UI","PingFang SC","Noto Sans SC","Hiragino Sans GB",sans-serif;
+  --font-mono:    "Cascadia Mono","Consolas","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* 节奏 */
+  --gutter: clamp(18px, 4.4vw, 72px);
+  --maxw:   1560px;
+  --ease:   cubic-bezier(.16,1,.3,1);
+  --ease-io:cubic-bezier(.65,.05,.36,1);
+  --dur:    .9s;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+
+html{
+  background:var(--bg);
+  color-scheme:dark;
+  -webkit-text-size-adjust:100%;
+  scroll-behavior:auto; /* 交给 JS 做带偏移的平滑滚动 */
+}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-display);
+  font-size:15px;
+  line-height:1.6;
+  font-weight:400;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+}
+body.is-locked{ overflow:hidden; }
+
+img,svg,canvas{ display:block; max-width:100%; }
+a{ color:inherit; text-decoration:none; }
+button{ font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; }
+h1,h2,h3,h4,p,figure,blockquote{ margin:0; }
+ul,ol{ margin:0; padding:0; list-style:none; }
+::selection{ background:var(--cyan); color:#02110e; }
+
+:focus-visible{
+  outline:1px solid var(--cyan);
+  outline-offset:4px;
+}
+
+/* ---------- 排版基座 ---------- */
+h1,h2,h3,h4{
+  font-family:var(--font-display);
+  font-weight:700;
+  line-height:1;
+  letter-spacing:-.02em;
+  font-variation-settings:"wdth" 100;
+}
+.display{
+  font-size:clamp(2.6rem, 6.2vw, 6rem);
+  line-height:.96;
+  letter-spacing:-.035em;
+  font-variation-settings:"wdth" 95;
+}
+.display--sm{ font-size:clamp(2.2rem, 4.6vw, 4.2rem); }
+
+p{ text-wrap:pretty; }
+
+/* 等宽 HUD 微字 */
+.mono,
+.sec-head,
+.hud__cell i,
+.depth,
+.clock,
+.btn--ghost,
+.svc__tag,
+.svc__idx,
+.card__en,
+.card__yr,
+.archive__hint,
+.path__state,
+.ftr__bar{
+  font-family:var(--font-mono);
+  font-variant-numeric:tabular-nums;
+}
+
+/* 常用工具类 */
+.wrap{
+  width:100%;
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
+.section{ position:relative; padding-block:clamp(88px, 11vw, 180px); }
+
+.hairline{ height:1px; background:var(--line); }
+
+.dot-pulse{
+  width:6px; height:6px; border-radius:50%;
+  background:var(--cyan);
+  box-shadow:0 0 0 0 var(--cyan-soft);
+  animation:dotPulse 2.4s var(--ease-io) infinite;
+  flex:none;
+}
+
+/* 无脚本提示 */
+.noscript{
+  position:fixed; left:50%; bottom:16px; transform:translateX(-50%);
+  z-index:200; padding:10px 16px; border:1px solid var(--line-2);
+  background:var(--bg-panel); font-size:12px; color:var(--ink-dim);
+  font-family:var(--font-mono);
+}

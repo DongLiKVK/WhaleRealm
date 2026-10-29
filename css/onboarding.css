@@ -1,0 +1,23 @@
+/* 新账号落地页（#/welcome）：白板账号先填三行资料。
+   只消费 app.css 的变量，浅色 / 夜间自动跟随；不碰任何既有选择器。 */
+.ob-wrap{max-width:640px;margin:48px auto 72px;padding:0 16px}
+.ob-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 28px 22px;box-shadow:var(--shadow-lg)}
+.ob-hd h1{margin:0 0 8px;font-size:22px;line-height:1.3;color:var(--txt)}
+.ob-hd p{margin:0;color:var(--txt-2);font-size:13.5px;line-height:1.7}
+.ob-body{display:flex;gap:22px;align-items:flex-start;margin:22px 0 4px}
+.ob-av{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px}
+.ob-av img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--line);background:var(--card-2)}
+.ob-av span{font-size:11.5px;color:var(--txt-3)}
+.ob-form{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ob-field label{display:block;font-size:12.5px;color:var(--txt-2);margin-bottom:5px}
+.ob-field input{width:100%;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-2);color:var(--txt);font-size:13.5px;font-family:inherit}
+.ob-field input:focus{outline:2px solid var(--brand-2);outline-offset:1px;border-color:transparent}
+.ob-field i{display:block;margin-top:4px;font-size:11.5px;color:var(--txt-3);font-style:normal}
+.ob-actions{display:flex;gap:10px;margin-top:20px}
+.ob-btn{height:38px;padding:0 20px;border-radius:10px;border:1px solid transparent;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.ob-btn.main{background:var(--brand);color:#fff}
+.ob-btn.main:hover{background:var(--brand-deep)}
+.ob-btn.ghost{background:transparent;border-color:var(--line);color:var(--txt-2)}
+.ob-btn.ghost:hover{border-color:var(--brand-2);color:var(--txt)}
+.ob-tip{margin:16px 0 0;font-size:12px;color:var(--txt-3);line-height:1.6}
+@media (max-width:560px){.ob-wrap{margin:24px auto 48px}.ob-card{padding:22px 18px 18px}.ob-body{flex-direction:column;gap:16px}.ob-av{flex-direction:row;gap:10px}}

@@ -1,0 +1,72 @@
+/* ══════════════════════════════════════════════════════════════
+   鲸域 · 赞助档头像框 · 展台（#/vip）
+   ──────────────────────────────────────────────────────────────
+   环与冠的绘制在 css/avatar-frame-maw.css —— 这里只管摆位、文字，
+   和展台上那颗「试样圆盘」。两边不共享颜色常量：试样盘的底色是固定的
+   中性深灰蓝，冠的颜色由 data-maw 自己带，所以换档色也不会串。
+
+   版面：一族一排四级（骨拱冠）。
+   一排之内看「同一套骨头怎么升一级」—— 冷钢、紫铜、赤金、血铁。
+   每张卡都带三档尺寸（34 / 26 / 19px），是给「小头像会不会糊」这个
+   问题准备的答案 —— 22px 上下还有颗粒，才敢往评论区放。
+   ══════════════════════════════════════════════════════════════ */
+
+.tf-famhd{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;
+           margin:22px 0 11px; padding-bottom:8px; border-bottom:1px solid var(--line-2) }
+.tf-famhd b{ font-size:13.5px; font-weight:800; letter-spacing:.02em }
+.tf-famhd i{ font-style:normal; font-size:11px; color:var(--txt-3); font-variant-numeric:tabular-nums }
+.tf-famhd code{ font-size:10.5px; letter-spacing:.09em; color:var(--txt-3);
+                font-family:ui-monospace,Menlo,monospace; background:var(--card-2);
+                border:1px solid var(--line); border-radius:5px; padding:1px 6px }
+.tf-famhd span{ font-size:11.5px; color:var(--txt-3) }
+
+.tf-row{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px }
+@media (max-width:980px){ .tf-row{ grid-template-columns:repeat(2, minmax(0,1fr)) } }
+@media (max-width:520px){ .tf-row{ grid-template-columns:minmax(0,1fr) } }
+
+.tf-card{ display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+          padding:20px 12px 15px; border:1px solid var(--line); border-radius:var(--r);
+          background:var(--card-2) }
+.tf-stage{ display:flex; align-items:center; justify-content:center; gap:12px;
+           min-height:80px; margin-bottom:4px }
+
+/* 展台小梯子：34 / 44px 两颗，看「小头像还认不认得出冠」。 */
+.tf-ladder{ display:flex; align-items:center; gap:7px }
+
+.tf-nm{ font-size:14px; font-weight:800; letter-spacing:.02em; margin-top:2px }
+.tf-lvl{ font-size:10px; font-weight:700; letter-spacing:.1em; color:var(--txt-3);
+         font-family:ui-monospace,Menlo,monospace; margin-top:-3px }
+.tf-tier{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--txt-2) }
+.tf-dot{ width:6px; height:6px; border-radius:50%; flex:none }
+.tf-note{ margin:2px 0 0; font-size:11.5px; line-height:1.75; color:var(--txt-3); max-width:16em }
+
+.tf-foot{ margin:14px 0 0; font-size:11.5px; line-height:1.8; color:var(--txt-3) }
+.tf-foot b{ color:var(--txt-2); font-weight:700 }
+
+/* ── 骨拱冠 MAW ──────────────────────────────────────────────
+   冠层的绘制全在 css/avatar-frame-maw.css。这里只补两件它管不到的事：
+   ① 展台上那颗试样盘 .tf-disc（冠是覆盖层，盘只要是个圆）；
+   ② 站内落位 —— wrapper 是 <span>，得替头像把原来的 flex / 网格身份接回来。 */
+
+.tf-disc{ display:flex; align-items:center; justify-content:center; width:100%; height:100%;
+          border-radius:50%; color:#fff; font-weight:800; line-height:1; user-select:none;
+          text-shadow:0 1px 3px rgba(0,0,0,.42) }
+
+/* 展台小梯子里的两颗：wrapper 自带尺寸，只要对齐 */
+.tf-ladder .maw-w{ display:inline-flex }
+
+.tf-on{ font-style:normal; font-size:10px; font-weight:700; letter-spacing:.04em;
+        color:var(--brand-ink); background:var(--sel); border:1px solid rgba(23,117,200,.28);
+        border-radius:20px; padding:1px 8px; margin-left:2px }
+html[data-theme="night"] .tf-on{ color:#8fc9ff; border-color:rgba(110,180,255,.34) }
+
+/* 站内落位：.maw-w 默认 inline-block / flex:none，行为等同原来的 .av。
+   唯一要额外交代的是移动端信息流那张网格 —— app.css:915 的规则是按
+   「.av 是 .trow 的直接子元素」写的，包了 wrapper 之后选择器就打不中了。 */
+@media (max-width:760px){
+  .trow > .maw-w{ grid-column:1; grid-row:1/3 }
+}
+/* 导航头像：按钮里是 flex，wrapper 占位与原头像同宽，间距不变 */
+.avatar-btn .maw-w{ margin-left:0 }
+/* 帖子里那颗 44px 的头像原本靠 .post-hd 的 align-items 顶到第一行 */
+.post-hd > .maw-w{ flex:none }

@@ -1,0 +1,11 @@
+[Unit]
+Description=每 2 分钟巡检一次鲸域防护状态
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Unit=jingyu-defense-guard.service
+
+[Install]
+WantedBy=timers.target

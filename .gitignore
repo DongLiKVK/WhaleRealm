@@ -60,3 +60,18 @@ coverage/
 _audit/
 at_analysis/
 downloads/
+
+# ---- 大体积素材 / 本地数据（不入库，2026-10-29 基线补录时排除）----
+avatar-frames/
+models/
+whale/
+dsh-whalerealm/
+server/data/
+docs/screenshots/
+
+# ---- 本地私密与临时文件 ----
+.vipdump.json
+_vpn_*.sh
+vpn/
+nul
+tmp-*

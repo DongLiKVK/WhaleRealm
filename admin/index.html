@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0a1b2b">
+<meta name="robots" content="noindex,nofollow">
+<title>鲸域 · 控制台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%230a1b2b'/%3E%3Cpath d='M13 41c0-9 8-16 19-16 8 0 14 4 17 9l6-5c1 0 1 1 1 2l-2 8c-1 3-4 5-7 4l-6-1c-4 5-10 8-16 8-7 0-12-4-12-9z' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<script src="js/theme-init.js"></script>
+<style>
+/* 关键首绘底色：与 css/admin.css 的 --bg / --bg-night 对齐，
+   避免刷新时浏览器先按默认白底画一帧。 */
+html{background:#f2f6fb}
+html[data-theme="night"]{background:#0b131c}
+html,body{margin:0;padding:0}
+body{background:#f2f6fb}
+html[data-theme="night"] body{background:#0b131c}
+</style>
+<link rel="stylesheet" href="css/admin.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+<a class="skip-link" href="#wr-main">跳到主要内容</a>
+
+<!-- 应用挂载点。首屏只放一个与真实骨架同构的加载壳：
+     侧栏 + 顶栏 + 内容块，尺寸一致，等 JS 判定完登录态再整体替换，不会跳版。 -->
+<div id="app" aria-busy="true">
+  <div class="boot" role="status" aria-live="polite">
+    <aside class="boot-side" aria-hidden="true">
+      <div class="boot-logo"><span class="boot-mark"></span><span class="boot-line w60"></span></div>
+      <div class="boot-nav">
+        <span class="boot-line w30"></span>
+        <span class="boot-line w90"></span><span class="boot-line w90"></span><span class="boot-line w90"></span>
+        <span class="boot-line w30"></span>
+        <span class="boot-line w90"></span><span class="boot-line w90"></span>
+      </div>
+      <div class="boot-foot"><span class="boot-dot"></span><span class="boot-line w70"></span></div>
+    </aside>
+    <div class="boot-main">
+      <div class="boot-topbar" aria-hidden="true"><span class="boot-line w30"></span><span class="boot-line w10"></span></div>
+      <div class="boot-body">
+        <div class="boot-hd"><span class="boot-line w40 tall"></span><span class="boot-line w20"></span></div>
+        <div class="boot-kpis" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="boot-panel" aria-hidden="true"></div>
+        <p class="boot-tip">正在校验管理员会话…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<noscript>
+  <div class="nojs">
+    <h1>鲸域 · 控制台</h1>
+    <p>后台由浏览器实时渲染，需要启用 JavaScript 才能登录与使用。</p>
+  </div>
+</noscript>
+
+<!-- toast / 抽屉 / 弹窗各自一个宿主，互不干扰 z-index，也不会被页面的重绘冲掉 -->
+<div id="wr-toast" class="toast-host" role="status" aria-live="polite" aria-atomic="false"></div>
+<div id="wr-layer"></div>
+
+<script type="module" src="js/boot.js"></script>
+</body>
+</html>

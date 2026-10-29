@@ -1,0 +1,11 @@
+[Unit]
+Description=每周核对一次条目的 npm 包名（条目页 npm 下载胶囊的数据源）
+
+[Timer]
+OnCalendar=Mon *-*-* 06:00:00
+RandomizedDelaySec=900
+Persistent=true
+Unit=jingyu-check-npm.service
+
+[Install]
+WantedBy=timers.target

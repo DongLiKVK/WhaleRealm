@@ -1,0 +1,42 @@
+[Unit]
+Description=WhaleRealm AI ranking snapshot refresh
+Documentation=https://whalerealm.top/#/rank
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/www/jingyu-rank/tools/refresh-rank-daily.mjs
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/jingyu-rank
+
+# 页面上的 fetchedAt 要用北京时间，服务器本身是 UTC
+Environment=TZ=Asia/Shanghai
+Environment=RANK_WORKDIR=/var/www/jingyu-rank
+Environment=RANK_DIST=/var/www/jingyu/dist
+Environment=RANK_BACKUP=/var/www/jingyu/backup
+Environment=RANK_KEEP=8
+
+ExecStart=/usr/bin/node /var/www/jingyu-rank/tools/refresh-rank-daily.mjs
+User=root
+Group=root
+
+# 日志走 journald：journalctl -u jingyu-rank-refresh -n 50 --no-pager
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jingyu-rank-refresh
+
+# ---------- 安全加固 ----------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/jingyu/dist /var/www/jingyu/backup /var/www/jingyu-rank
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# 抓两个站 + 写产物，正常 10 秒内；留足重试时间
+TimeoutStartSec=600
+Nice=10
+IOSchedulingClass=idle

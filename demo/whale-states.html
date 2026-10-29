@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>鲸鱼娘即状态 · 演示</title>
+<style>
+:root{
+  --brand:#1775c8; --brand-ink:#0f63b4; --brand-deep:#0a4a86;
+  --bg:#eef4fa; --card:#ffffff;
+  --line:#d9e5f1; --line-2:#eaf2fa;
+  --txt:#132435; --txt-2:#4b5f74; --txt-3:#5b6e82;
+  --ok:#0a7a58; --rose:#c22252;
+  --deep:#04101f;
+  --ease-out:cubic-bezier(.23,1,.32,1);
+  --dur-1:130ms; --dur-2:180ms; --dur-3:240ms; --dur-4:340ms;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",SimSun,serif;
+  --sans:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--sans); color:var(--txt); background:var(--bg);
+  font-size:14px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(1100px 360px at 50% -150px, rgba(92,196,246,.22), transparent 68%),
+    linear-gradient(180deg,#e4eef9 0, var(--bg) 340px);
+  background-repeat:no-repeat;
+}
+.shell{max-width:1240px;margin:0 auto;padding:0 32px 96px}
+
+/* ---------- 页头：宋体大标题,不用渐变文字、不用小标签 ---------- */
+.hd{border-top:3px solid var(--brand);padding-top:26px;display:flex;justify-content:space-between;gap:40px;align-items:flex-end}
+.hd h1{
+  font-family:var(--serif);font-weight:700;margin:0;
+  font-size:clamp(30px,3.6vw,52px);line-height:1.18;letter-spacing:.5px;color:#0a2438;
+}
+.hd h1 em{font-style:normal;color:var(--brand-deep)}
+.hd p{margin:12px 0 0;max-width:46ch;color:var(--txt-2);font-size:13.5px;line-height:1.8}
+.meta{font-size:12px;color:var(--txt-3);text-align:right;line-height:2;white-space:nowrap;padding-bottom:4px}
+.meta b{font-family:var(--mono);color:var(--txt);font-variant-numeric:tabular-nums}
+
+/* ---------- 主体：左轨道 + 右舞台,不对称 ---------- */
+.body{display:grid;grid-template-columns:286px minmax(0,1fr);gap:34px;margin-top:34px;align-items:start}
+
+/* 状态轨道：一条竖线 + 刻度,竖线是真的,不是装饰 */
+.rail{border-left:1px solid var(--line);padding-left:0}
+.rail h2{
+  font-family:var(--serif);font-size:15px;font-weight:700;color:#0a2438;
+  margin:0 0 4px 18px;letter-spacing:.3px;
+}
+.rail .hint{margin:0 0 14px 18px;font-size:11.5px;color:var(--txt-3);line-height:1.6}
+.st{
+  position:relative;display:grid;grid-template-columns:1fr auto;gap:2px 10px;
+  width:100%;text-align:left;background:none;border:0;cursor:pointer;
+  padding:11px 12px 11px 18px;border-radius:0 10px 10px 0;font-family:inherit;
+  transition:background-color var(--dur-2) ease;
+}
+.st::before{
+  content:"";position:absolute;right:calc(100% + 0px);top:50%;width:9px;height:9px;
+  margin-top:-4.5px;border-radius:50%;background:#fff;border:1.5px solid var(--line);
+  transform:translateX(-5px);transition:background-color var(--dur-2) ease,border-color var(--dur-2) ease,transform var(--dur-3) var(--ease-out);
+}
+.st:hover{background:rgba(23,117,200,.06)}
+.st:hover::before{border-color:var(--brand)}
+.st.on{background:rgba(23,117,200,.10)}
+.st.on::before{background:var(--brand);border-color:var(--brand);transform:translateX(-8px) scale(1.18)}
+.st .nm{font-size:13.5px;font-weight:600;color:var(--txt);transition:color var(--dur-2) ease}
+.st.on .nm{color:var(--brand-deep)}
+.st .cl{grid-column:1;font-size:11.5px;color:var(--txt-3);margin-top:1px}
+.st .id{grid-row:1 / span 2;grid-column:2;align-self:center;font-family:var(--mono);font-size:11px;color:#9aa9b8;letter-spacing:.4px}
+.st.on .id{color:var(--brand-ink)}
+.st .bar{grid-column:1 / span 2;height:2px;margin-top:8px;background:var(--line-2);border-radius:2px;overflow:hidden}
+.st .bar i{display:block;height:100%;width:0;background:var(--brand);border-radius:2px}
+.st.on .bar i{width:100%;transition:width var(--dur-4) var(--ease-out)}
+
+/* ---------- 舞台 ---------- */
+.stage{position:relative;border-radius:18px;overflow:hidden;background:var(--deep);
+  box-shadow:0 1px 2px rgba(16,60,105,.06), 0 26px 60px -34px rgba(6,32,58,.55);
+  isolation:isolate}
+.stage::before{
+  content:"";position:absolute;inset:0;z-index:0;
+  background:radial-gradient(1200px 620px at 50% -12%, #12406e 0%, #071a30 46%, #030b16 100%);
+}
+.stage canvas,.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.stage iframe{z-index:2;background:transparent}
+.stage{aspect-ratio:16 / 9;min-height:360px}
+.stage .badge{
+  position:absolute;left:14px;top:14px;z-index:3;display:flex;align-items:center;gap:7px;
+  padding:5px 11px;border-radius:999px;font-size:11px;color:#cfe6fb;
+  background:rgba(6,22,40,.62);border:1px solid rgba(127,211,255,.22);backdrop-filter:blur(6px);
+}
+.stage .badge .d{width:6px;height:6px;border-radius:50%;background:#7fd3ff}
+.stage .badge.off .d{background:#ffcf8f}
+.stage .cap{
+  position:absolute;right:14px;top:14px;z-index:3;font-size:11px;color:#8fb4d8;
+  font-family:var(--mono);letter-spacing:.4px;
+}
+
+/* ---------- 读数条 ---------- */
+.read{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:16px;
+  border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.read > div{padding:12px 15px;border-left:1px solid var(--line-2)}
+.read > div:first-child{border-left:0}
+.read .k{font-size:11px;color:var(--txt-3);letter-spacing:.2px}
+.read .v{font-family:var(--mono);font-size:16px;color:var(--txt);font-variant-numeric:tabular-nums;margin-top:2px}
+
+/* ---------- 对照组：随机 vs 状态 ---------- */
+.ctrl{display:flex;gap:10px;align-items:center;margin-top:18px;flex-wrap:wrap}
+.tog{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--card)}
+.tog button{
+  border:0;background:none;font-family:inherit;font-size:12.5px;color:var(--txt-2);
+  padding:6px 14px;border-radius:999px;cursor:pointer;transition:background-color var(--dur-2) ease,color var(--dur-1) ease;
+}
+.tog button.on{background:var(--brand);color:#fff;font-weight:600}
+.btn{
+  border:1px solid var(--line);background:var(--card);color:var(--txt);font-family:inherit;
+  font-size:12.5px;padding:7px 15px;border-radius:8px;cursor:pointer;
+  transition:border-color var(--dur-2) ease,background-color var(--dur-2) ease,transform var(--dur-1) var(--ease-out);
+}
+.btn:hover{border-color:var(--brand);background:#f4f9ff}
+.btn:active{transform:translateY(1px)}
+
+/* 事件流 */
+.log{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.log .row{display:grid;grid-template-columns:76px 1fr auto;gap:12px;align-items:baseline;
+  padding:6px 0;border-bottom:1px dashed var(--line-2);font-size:12.5px}
+.log .row .t{font-family:var(--mono);color:var(--txt-3);font-size:11.5px}
+.log .row .m{color:var(--txt)}
+.log .row .s{font-size:11.5px;color:var(--brand-ink);font-family:var(--mono)}
+
+/* ---------- 技术注记：三栏,竖线分隔 ---------- */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:52px;
+  border-top:1px solid var(--line);padding-top:22px}
+.notes article{padding:0 26px;border-left:1px solid var(--line-2)}
+.notes article:first-child{padding-left:0;border-left:0}
+.notes h3{font-family:var(--serif);font-size:14.5px;font-weight:700;margin:0 0 6px;color:#0a2438}
+.notes p{margin:0;font-size:12px;color:var(--txt-2);line-height:1.8}
+
+/* ---------- 入场：一次编排,之后只在交互时动 ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.load .st,.load .stage,.load .read,.load .notes article,.load .hd{
+  animation:rise var(--dur-4) var(--ease-out) both;
+}
+.load .hd{animation-delay:0ms}
+.load .stage{animation-delay:60ms}
+.load .st:nth-child(1){animation-delay:110ms}
+.load .st:nth-child(2){animation-delay:170ms}
+.load .st:nth-child(3){animation-delay:230ms}
+.load .st:nth-child(4){animation-delay:290ms}
+.load .st:nth-child(5){animation-delay:350ms}
+.load .st:nth-child(6){animation-delay:410ms}
+.load .st:nth-child(7){animation-delay:470ms}
+.load .st:nth-child(8){animation-delay:530ms}
+.load .read{animation-delay:300ms}
+.load .notes article{animation-delay:380ms}
+
+@media (prefers-reduced-motion:reduce){
+  .load .st,.load .stage,.load .read,.load .notes article,.load .hd{animation:none}
+  *{transition-duration:1ms!important}
+}
+@media (max-width:900px){
+  .body{grid-template-columns:1fr;gap:22px}
+  .body > section{order:-1}
+  .rail{margin-top:6px}
+  .rail{border-left:0;padding-left:0}
+  .rail h2,.rail .hint{margin-left:0}
+  .st{padding-left:0}
+  .st::before{display:none}
+  .read{grid-template-columns:repeat(2,1fr)}
+  .read > div:nth-child(3){border-left:0}
+  .notes{grid-template-columns:1fr}
+  .notes article{padding:0;border-left:0;margin-bottom:18px}
+  .hd{flex-direction:column;align-items:flex-start;gap:14px}
+  .meta{text-align:left}
+  .stage{aspect-ratio:4 / 5;min-height:0}
+  .stage .cap{display:none}
+}
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+
+  <header class="hd">
+    <div>
+      <h1>鲸鱼娘不只是<em>装饰</em></h1>
+      <p>把 105 段现成动作当成界面语言：每一种系统状态,配一段固定的表演。下面这 8 个状态全部用你仓库里已有的素材,没有新做一帧。</p>
+    </div>
+    <div class="meta">
+      素材池 <b id="pool">—</b> 段<br>
+      本页占用 <b id="used">8</b> 段<br>
+      播放源 <b id="src">状态机</b>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <nav class="rail">
+      <h2>状态</h2>
+      <p class="hint">点一行,她就换成对应动作。竖线是时间轴,圆点是当前状态。</p>
+      <button class="st" data-clip="c033" data-key="idle" data-loop="1" data-note="空闲 · 循环,像呼吸一样一直在">
+        <span class="nm">待机</span><span class="id">c033</span>
+        <span class="cl">待机呼吸休闲</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c068" data-key="think" data-loop="1" data-note="加载 · 循环,等到有结果为止">
+        <span class="nm">思考</span><span class="id">c068</span>
+        <span class="cl">深度思考碎碎念</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c048" data-key="busy" data-loop="1" data-note="忙碌 · 循环,处理完才停">
+        <span class="nm">忙碌</span><span class="id">c048</span>
+        <span class="cl">工作状态-忙碌点按</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c039" data-key="notify" data-note="有新私信 · 她替你招呼一声">
+        <span class="nm">有消息</span><span class="id">c039</span>
+        <span class="cl">点击回应-元气挥手</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c050" data-key="done" data-note="成功 · 只演一次,不循环">
+        <span class="nm">完成</span><span class="id">c050</span>
+        <span class="cl">工作状态-雀跃庆祝</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c047" data-key="fail" data-note="失败 · 报错也该有人味">
+        <span class="nm">出错</span><span class="id">c047</span>
+        <span class="cl">工作状态-垂头叹气冒汗</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c070" data-key="reward" data-note="进账 · 打赏到账">
+        <span class="nm">进账</span><span class="id">c070</span>
+        <span class="cl">收红包</span><span class="bar"><i></i></span>
+      </button>
+      <button class="st" data-clip="c057" data-key="wow" data-note="彩蛋 · 低频才珍贵">
+        <span class="nm">惊喜</span><span class="id">c057</span>
+        <span class="cl">蓝鲸现世</span><span class="bar"><i></i></span>
+      </button>
+    </nav>
+
+    <section>
+      <div class="stage" id="stage">
+        <iframe id="whale" src="../whale/index.html?embed=1&amp;bare=1&amp;clear=1&amp;spot=center" title="鲸鱼娘立绘" scrolling="no" tabindex="-1"></iframe>
+        <div class="badge" id="vis"><span class="d"></span><span id="visT">在视口内 · 播放中</span></div>
+        <div class="cap" id="cap">c033 · 待机呼吸休闲</div>
+      </div>
+
+      <div class="read">
+        <div><div class="k">当前状态</div><div class="v" id="r1">待机</div></div>
+        <div><div class="k">片段</div><div class="v" id="r2">c033</div></div>
+        <div><div class="k">切换次数</div><div class="v" id="r3">0</div></div>
+        <div><div class="k">离屏播放</div><div class="v" id="r4">播放中</div></div>
+      </div>
+
+      <div class="ctrl">
+        <div class="tog" id="tog">
+          <button class="on" data-mode="state">状态机</button>
+          <button data-mode="random">现在的随机池</button>
+        </div>
+        <button class="btn" id="tour">自动巡演一遍</button>
+        <button class="btn" id="away">滚到远处看离屏</button>
+      </div>
+
+      <div class="log" id="log" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <article>
+      <h3>同一段素材,不变的是"她就该这样"</h3>
+      <p>随机池的问题是语义缺位:用户看不清"现在系统在干什么"。状态机把 8 段固定下来,动作即反馈 —— 这是把装饰转成信息。</p>
+    </article>
+    <article>
+      <h3>按需加载,59.5 MB 不预取</h3>
+      <p>107 段平均 580 KB,全量预取会毁掉首屏。这里只在下一次切换前加载目标片段,其余不动;舞台里只有两个 video 元素在交替。</p>
+    </article>
+    <article>
+      <h3>离屏就停,不进后台空跑</h3>
+      <p>首页头图、空间头图、登录左卡、会员人物位共用同一张卡。滚出视口后立刻暂停,滚回来接着演 —— 由 IntersectionObserver 判定,不是定时器。</p>
+    </article>
+  </div>
+
+</div>
+
+<div style="height:120vh" aria-hidden="true"></div>
+
+<script>
+(function(){
+  'use strict';
+  var shell = document.getElementById('shell');
+  var fr = document.getElementById('whale');
+  var stage = document.getElementById('stage');
+  var cap = document.getElementById('cap');
+  var visT = document.getElementById('visT');
+  var vis = document.getElementById('vis');
+  var logEl = document.getElementById('log');
+  var r1 = document.getElementById('r1'), r2 = document.getElementById('r2'), r3 = document.getElementById('r3');
+  var poolEl = document.getElementById('pool'), srcEl = document.getElementById('src');
+
+  var states = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.st'), function(el){
+    states[el.getAttribute('data-key')] = {
+      el: el,
+      clip: el.getAttribute('data-clip'),
+      note: el.getAttribute('data-note'),
+      loop: el.getAttribute('data-loop') === '1',
+      name: el.querySelector('.nm').textContent,
+      label: el.querySelector('.cl').textContent
+    };
+  });
+
+  var mode = 'state';
+  var curKey = 'idle';
+  var switches = 0;
+  var ready = false;
+  var lastPlayed = '';
+
+  requestAnimationFrame(function(){ shell.classList.add('load'); });
+
+  function whale(){
+    try { return fr.contentWindow.__whale; } catch(e){ return null; }
+  }
+  function wstate(){
+    var w = whale();
+    if(!w) return null;
+    try { return w.state(); } catch(e){ return null; }
+  }
+  function stamp(){
+    var d = new Date();
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+  }
+  function log(msg, tag){
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.style.opacity = '0';
+    row.innerHTML = '<span class="t">' + stamp() + '</span><span class="m"></span><span class="s"></span>';
+    row.querySelector('.m').textContent = msg;
+    row.querySelector('.s').textContent = tag || '';
+    logEl.insertBefore(row, logEl.firstChild);
+    requestAnimationFrame(function(){ row.style.transition = 'opacity 160ms ease, transform 160ms cubic-bezier(.23,1,.32,1)'; row.style.opacity = '1'; });
+    while(logEl.children.length > 9) logEl.removeChild(logEl.lastChild);
+  }
+
+  function paint(){
+    var s = states[curKey];
+    Array.prototype.forEach.call(document.querySelectorAll('.st'), function(el){
+      el.classList.toggle('on', el === s.el);
+    });
+    r1.textContent = s.name;
+    r2.textContent = s.clip;
+    cap.textContent = s.clip + ' \u00b7 ' + s.label;
+  }
+
+  function playClip(key, quiet){
+    var s = states[key];
+    if(!s || !ready) return;
+    var w = whale();
+    if(!w) return;
+    var ok = w.play(s.clip);
+    if(!ok) return;
+    switches++;
+    r3.textContent = switches;
+    try { var d = fr.contentDocument; if(d){ Array.prototype.forEach.call(d.querySelectorAll('video.char'), function(v){ v.loop = false; }); } } catch(e){}
+    lastPlayed = s.clip;
+    if(!quiet) log('切到「' + s.name + '」 \u2014 ' + s.note, s.clip);
+  }
+
+  function setState(key, quiet){
+    if(!states[key]) return;
+    curKey = key;
+    paint();
+    playClip(key, quiet);
+  }
+
+  function setMode(next){
+    mode = next;
+    Array.prototype.forEach.call(document.querySelectorAll('#tog button'), function(b){
+      b.classList.toggle('on', b.getAttribute('data-mode') === next);
+    });
+    srcEl.textContent = next === 'state' ? '状态机' : '随机池';
+    if(next === 'random'){
+      var w = whale();
+      var doc = null; try { doc = fr.contentDocument; } catch(e){}
+      if(doc){ Array.prototype.forEach.call(doc.querySelectorAll('video.char'), function(v){ try{ v.play(); }catch(e){} }); }
+      if(w && ready) w.playRandom();
+      log('切到随机池 \u2014 每段演完自己掷骰,语义消失', 'random');
+    }else{
+      setState(curKey);
+    }
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.st'), function(el){
+    el.addEventListener('click', function(){ setState(el.getAttribute('data-key')); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#tog button'), function(b){
+    b.addEventListener('click', function(){ setMode(b.getAttribute('data-mode')); });
+  });
+
+  var tourT = [];
+  document.getElementById('tour').addEventListener('click', function(){
+    tourT.forEach(clearTimeout); tourT = [];
+    var keys = ['think','busy','done','fail','notify','reward','idle'];
+    setMode('state');
+    keys.forEach(function(k, i){
+      tourT.push(setTimeout(function(){ setState(k); }, 260 + i * 900));
+    });
+  });
+
+  document.getElementById('away').addEventListener('click', function(){
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    log('已滚离舞台 \u2014 观察左侧角标与播放是否停下', 'io');
+  });
+
+  /* 离屏暂停演示：真实 IntersectionObserver,不是假开关 */
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){
+      var on = es[0].isIntersecting;
+      vis.classList.toggle('off', !on);
+      visT.textContent = on ? '在视口内 \u00b7 播放中' : '已离屏 \u00b7 播放暂停';
+      r4.textContent = on ? '播放中' : '已暂停';
+    }, { threshold: .2 }).observe(stage);
+  }
+
+  /* 钉住状态：卡片本身是「演完自动掷骰换下一段」，那是它的随机池行为。
+     状态机模式下要的是「这一帧就是当前状态」，所以在片尾前 60ms 自己按暂停 ——
+     停在最后一帧，ended 不触发，就不会被自动续播抢走。同源 iframe，直接拿 video。 */
+  var pinned = [];
+  function pinVideos(){
+    try{
+      var doc = fr.contentDocument;
+      var vs = doc ? doc.querySelectorAll('video.char') : [];
+      if(!vs.length) return false;
+      pinned = Array.prototype.slice.call(vs);
+      /* timeupdate 只有约 4Hz,一次跳跃可能直接越过片尾 60ms 的窗口而让 ended 抢跑;
+         改成逐帧监看(60Hz),窗口放宽到 120ms,把「一次性」的定格做成确定行为。 */
+      var pinFlag = { clip: '', done: false };
+      function watchPin(){
+        if(mode === 'state'){
+          pinned.forEach(function(v){
+            if(v.dataset.clip !== states[curKey].clip) return;
+            if(states[curKey].loop){
+              /* 持续态:钉住 loop。卡片每次切换都会把它重置为 false,所以持续纠正 */
+              if(!v.loop) v.loop = true;
+              return;
+            }
+            if(v.loop) v.loop = false;
+            if(v.duration && !v.paused && v.duration - v.currentTime < 0.12){
+              /* 不 seek:改 currentTime 会让解码器重定位,末帧反而被冲掉(实测 ct 归 0、画面回到首帧)。
+                 就地在当前位置停住,画面停在即将收尾的那一帧。 */
+              v.pause();
+              if(pinFlag.clip !== v.dataset.clip){
+                pinFlag.clip = v.dataset.clip;
+                log('已定格 \u2014 一次性动作演完停在末帧,不掷骰', 'pin');
+              }
+            }
+          });
+        }
+        requestAnimationFrame(watchPin);
+      }
+      requestAnimationFrame(watchPin);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* 轮询：等卡里的 __whale 就绪;状态模式下发现被自动续播换掉了就拉回本状态 */
+  /* 允许 ?state=fail&mode=random 直接进某状态,便于截图与回归 */  var qs = new URLSearchParams(location.search);
+  var wantState = qs.get('state');
+  var wantMode = qs.get('mode');
+  if(wantMode === 'random'){ mode = 'random'; }
+  if(wantState && states[wantState]){ curKey = wantState; paint(); }
+
+  var ready_t = 0, mismatch = 0;
+  function tick(){
+    var s = wstate();
+    if(!s){ return; }
+    if(!ready && s.mode === 'video'){
+      ready = true;
+      var w = whale();
+      var pool = 0;
+      try { pool = w.pool.length; } catch(e){}
+      poolEl.textContent = pool || '107';
+      log('立绘就绪 \u2014 池子 ' + (pool || 107) + ' 段,本页固定用 8 段', 'boot');
+      pinVideos();
+      paint();
+      if(mode === 'random'){ w.playRandom(); switches++; r3.textContent = switches; }
+      else { playClip(curKey); }
+      return;
+    }
+    if(!ready) return;
+    if(mode !== 'state') return;
+    var target = states[curKey].clip;
+    if(s.clip !== target){
+      mismatch++;
+      if(mismatch >= 2){ mismatch = 0; playClip(curKey, true); }
+    }else{ mismatch = 0; }
+  }
+  setInterval(tick, 500);
+  setTimeout(tick, 300);
+
+  paint();
+})();
+</script>
+</body>
+</html>
