@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/motion.css">
+<link rel="stylesheet" href="css/at-hero.css">
 </head>
 <body>
 
@@ -101,71 +102,73 @@
 
   <!-- ============ 01 主视觉 ============ -->
   <section class="hero" id="top">
-    <canvas class="hero__canvas" id="heroCanvas" aria-hidden="true"></canvas>
-    <div class="hero__fallback" aria-hidden="true"></div>
-    <div class="hero__ghost" aria-hidden="true">11000</div>
+    <div class="hero__viewport">
+      <canvas class="hero__canvas" id="heroCanvas" aria-hidden="true"></canvas>
+      <div class="hero__fallback" aria-hidden="true"></div>
 
-    <div class="hero__ring" aria-hidden="true">
-      <svg viewBox="0 0 600 600">
-        <circle cx="300" cy="300" r="299" fill="none" stroke="currentColor" stroke-width="1" opacity=".22"/>
-        <circle cx="300" cy="300" r="238" fill="none" stroke="currentColor" stroke-width="1" opacity=".12" stroke-dasharray="2 10"/>
-        <circle cx="300" cy="300" r="170" fill="none" stroke="currentColor" stroke-width="1" opacity=".16"/>
-      </svg>
-    </div>
-
-    <div class="hero__inner wrap">
-      <div class="hero__kicker" data-reveal style="--i:0">
-        <span class="dot-pulse"></span>
-        <span>深海开发者聚落</span>
-        <span class="hero__kicker-en">DEEP-SEA HABITAT FOR MAKERS</span>
+      <!-- 降级环：WebGL 接管后隐藏 -->
+      <div class="hero__ring" aria-hidden="true">
+        <svg viewBox="0 0 600 600">
+          <circle cx="300" cy="300" r="299" fill="none" stroke="currentColor" stroke-width="1" opacity=".22"/>
+          <circle cx="300" cy="300" r="238" fill="none" stroke="currentColor" stroke-width="1" opacity=".12" stroke-dasharray="2 10"/>
+          <circle cx="300" cy="300" r="170" fill="none" stroke="currentColor" stroke-width="1" opacity=".16"/>
+        </svg>
       </div>
 
-      <h1 class="hero__title">
-        <span class="split-line"><span class="hero__cjk" data-split="char">鲸域</span></span>
-      </h1>
-
-      <div class="hero__latin" aria-label="Whale Domain">
-        <span class="split-line"><span data-split="char">WHALE</span></span>
-        <span class="split-line hero__latin-b"><span data-split="char">DOMAIN</span></span>
-        <span class="hero__latin-meta">/ 11,000 M BELOW /</span>
+      <!-- 巨字层：屏幕语义保留，画面由 WebGL 烘焙贴图绘制 -->
+      <div class="hero__type">
+        <h1 class="hero__cjk">鲸域</h1>
+        <p class="hero__latin">WHALE DOMAIN</p>
+        <p class="hero__meta">11,000 M BELOW · 31.2304° N / 121.4737° E</p>
+        <p class="hero__lead">把代码沉到海面以下。<br>让作品，拥有 11,000 米的压强。</p>
       </div>
 
-      <p class="hero__lead" data-reveal style="--i:5">
-        把代码沉到海面以下。<br>
-        让作品，拥有 11,000 米的压强。
-      </p>
-
-      <div class="hero__actions" data-reveal style="--i:6">
-        <a class="btn btn--solid" href="#manifesto" data-cursor="link" data-magnetic>
-          <span>开始下潜</span>
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v10M3.6 8.2 8 12.6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <div class="atnav">
+        <a class="atnav__pill" href="#archive" data-cursor="link">
+          <span>作品</span><i class="atnav__rule" aria-hidden="true"></i><span>联系</span>
         </a>
-        <button class="btn btn--text" type="button" id="sonarBtn" data-cursor="link">
-          <span class="sonar-wave" aria-hidden="true"></span>
-          <span>听一段声呐</span>
-        </button>
       </div>
-    </div>
 
-    <div class="hero__hud" data-reveal style="--i:7">
-      <div class="hud__cell"><i>LAT / LON</i><span>31.2304° N&nbsp;&nbsp;121.4737° E</span></div>
-      <div class="hud__cell"><i>WATER TEMP</i><span>2.4 °C</span></div>
-      <div class="hud__cell"><i>PRESSURE</i><span>1,102 BAR</span></div>
-      <div class="hud__cell hud__cell--sonar"><i>SONAR</i>
-        <span class="sonar-lines" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b></span>
-        <span class="hud__ok">ONLINE</span>
+      <div class="hero__drag" aria-hidden="true">
+        <i class="hero__drag-dot"></i><span>拖拽旋转 · DRAG</span>
       </div>
-    </div>
 
-    <a class="hero__scroll" href="#manifesto" data-cursor="link" aria-label="向下滚动">
-      <svg class="badge-rot" viewBox="0 0 120 120" aria-hidden="true">
-        <defs><path id="circlePath" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0"/></defs>
-        <text><textPath href="#circlePath" startOffset="0">SCROLL TO DIVE · 向下下潜 · WHALE DOMAIN · </textPath></text>
-      </svg>
-      <span class="hero__scroll-arrow" aria-hidden="true">
-        <svg viewBox="0 0 16 24"><path d="M8 1v20M2 15l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-      </span>
-    </a>
+      <div class="hero__query">
+        <p class="hero__query-q">你在找什么？</p>
+        <ul class="hero__query-list">
+          <li><a href="#services" data-cursor="link">站点与产品</a></li>
+          <li><a href="#services" data-cursor="link">装置与空间</a></li>
+          <li><a href="#services" data-cursor="link">XR / 语音界面</a></li>
+          <li><a href="#archive" data-cursor="link">多人世界</a></li>
+          <li><a href="#archive" data-cursor="link">游戏</a></li>
+        </ul>
+        <div class="hero__actions">
+          <a class="btn btn--solid" href="#manifesto" data-cursor="link" data-magnetic>
+            <span>开始下潜</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v10M3.6 8.2 8 12.6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </a>
+          <button class="btn btn--text" type="button" id="sonarBtn" data-cursor="link">
+            <span class="sonar-wave" aria-hidden="true"></span>
+            <span>听一段声呐</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="hero__hud">
+        <div class="hud__cell"><i>LAT / LON</i><span>31.2304° N / 121.4737° E</span></div>
+        <div class="hud__cell"><i>WATER</i><span>2.4 °C</span></div>
+        <div class="hud__cell"><i>PRESSURE</i><span>1,102 BAR</span></div>
+        <div class="hud__cell hud__cell--sonar"><i>SONAR</i>
+          <span class="sonar-lines" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b></span>
+          <span class="hud__ok">ONLINE</span>
+        </div>
+      </div>
+
+      <a class="hero__scroll" href="#manifesto" data-cursor="link" aria-label="向下滚动">
+        <span class="hero__scroll-line" aria-hidden="true"><i></i></span>
+        <span>SCROLL</span>
+      </a>
+    </div>
   </section>
 
   <!-- ============ 跑马灯 ============ -->

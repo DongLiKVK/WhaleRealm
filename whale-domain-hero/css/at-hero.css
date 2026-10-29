@@ -1,0 +1,235 @@
+/* =========================================================
+   at-hero.css — AT 式主视觉层（覆盖 layout.css 的 .hero 规则）
+   放在最后加载：layout.css → components.css → motion.css → at-hero.css
+   ========================================================= */
+
+@property --hp{ syntax: '<number>'; inherits: true; initial-value: 0; }
+
+/* ---------- 舞台：sticky 视口 + 200svh 滚动行程 ---------- */
+.hero{
+  position:relative;
+  height:200svh;
+  min-height:0;
+  overflow:visible;
+  display:block;
+  padding:0;
+  isolation:isolate;
+  background:#04070b;
+}
+.hero__viewport{
+  position:sticky; top:0;
+  height:100svh; width:100%;
+  overflow:hidden;
+  isolation:isolate;
+  background:#04070b;
+  cursor:grab;
+  touch-action:pan-y;
+}
+.hero__viewport:active{ cursor:grabbing; }
+
+.hero__canvas{ position:absolute; inset:0; width:100%; height:100%; z-index:0; }
+.hero__fallback{
+  position:absolute; inset:0; z-index:-1;
+  background:
+    radial-gradient(46% 42% at 62% 46%, rgba(60,140,168,.20) 0%, rgba(6,13,22,0) 62%),
+    radial-gradient(120% 90% at 50% 118%, #050a10 0%, #04070b 70%),
+    #04070b;
+}
+
+/* 降级环（WebGL 不可见时顶上） */
+.hero__ring{
+  position:absolute; right:8vw; top:50%; z-index:1;
+  width:min(60vh,560px); aspect-ratio:1; transform:translateY(-50%);
+  color:var(--cyan); opacity:.5; pointer-events:none;
+}
+.hero__ring svg{ width:100%; height:100%; animation:spin 90s linear infinite; }
+.hero[data-gl="on"] .hero__ring{ display:none; }
+
+/* ---------- 巨字层：GL 接管后仅留语义 ---------- */
+.hero__type{
+  position:absolute; left:var(--gutter); bottom:clamp(15vh,18vh,24vh); z-index:3;
+  width:min(58vw,900px);
+  pointer-events:none;
+  transition:opacity .5s var(--ease);
+}
+.hero[data-gl="on"] .hero__type{ opacity:0; }
+
+.hero__cjk{
+  font-family:var(--font-cjk);
+  font-size:clamp(72px,13.2vw,208px);
+  line-height:.86; font-weight:700; letter-spacing:-.045em;
+  color:var(--ink);
+  text-shadow:0 0 42px rgba(120,220,240,.16);
+}
+.hero__latin{
+  margin-top:.14em;
+  font-family:var(--font-display);
+  font-size:clamp(18px,2.7vw,44px); font-weight:300;
+  letter-spacing:.30em; line-height:1;
+  color:transparent;
+  -webkit-text-stroke:1px rgba(241,238,229,.46);
+}
+.hero__meta{
+  margin-top:clamp(14px,1.8vh,26px);
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.19em;
+  color:var(--cyan); text-transform:uppercase;
+}
+.hero__lead{
+  margin-top:clamp(14px,1.8vh,24px);
+  font-size:clamp(13px,1.02vw,15.5px); line-height:1.66;
+  color:var(--ink-2); max-width:30ch;
+}
+
+/* ---------- 右上胶囊导航（AT 的 WORK — CONTACT） ---------- */
+.atnav{
+  position:absolute; right:var(--gutter); top:clamp(58px,7.4vh,92px); z-index:6;
+  opacity:0; transform:translateY(-8px);
+  transition:opacity .9s var(--ease) .15s, transform .9s var(--ease) .15s;
+}
+body[data-loaded="true"] .atnav{ opacity:1; transform:none; }
+.atnav__pill{
+  display:inline-flex; align-items:center; gap:clamp(12px,1.4vw,20px);
+  padding:clamp(11px,1.3vh,15px) clamp(16px,1.7vw,26px);
+  border:1px solid rgba(241,238,229,.18);
+  border-radius:999px;
+  background:rgba(7,14,20,.42);
+  -webkit-backdrop-filter:blur(10px) saturate(1.2);
+  backdrop-filter:blur(10px) saturate(1.2);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.18em;
+  color:var(--ink-2); text-transform:uppercase;
+  transition:border-color .5s var(--ease), color .5s var(--ease), background .5s var(--ease);
+}
+.atnav__pill:hover{
+  border-color:rgba(77,239,209,.55);
+  color:var(--ink);
+  background:rgba(10,22,28,.6);
+}
+.atnav__rule{
+  display:block; width:clamp(22px,2.6vw,44px); height:1px;
+  background:linear-gradient(90deg, rgba(241,238,229,.2), rgba(77,239,209,.85));
+  transition:width .6s var(--ease);
+}
+.atnav__pill:hover .atnav__rule{ width:clamp(38px,4.4vw,74px); }
+
+/* ---------- 拖拽提示 ---------- */
+.hero__drag{
+  position:absolute; left:var(--gutter); top:clamp(58px,7.4vh,92px); z-index:6;
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:.22em;
+  color:var(--ink-faint); text-transform:uppercase;
+  opacity:0; transition:opacity 1s var(--ease) .5s;
+  pointer-events:none;
+}
+body[data-loaded="true"] .hero__drag{ opacity:1; }
+.hero__drag-dot{
+  width:5px; height:5px; border-radius:50%;
+  background:var(--cyan);
+  box-shadow:0 0 0 0 var(--cyan-soft);
+  animation:dragPing 2.6s var(--ease-io) infinite;
+}
+@keyframes dragPing{
+  0%{ box-shadow:0 0 0 0 rgba(77,239,209,.42); }
+  70%{ box-shadow:0 0 0 9px rgba(77,239,209,0); }
+  100%{ box-shadow:0 0 0 0 rgba(77,239,209,0); }
+}
+
+/* ---------- 分类清单：随滚入显形 ---------- */
+.hero__query{
+  position:absolute; left:var(--gutter); bottom:clamp(13vh,16vh,21vh); z-index:5;
+  width:min(28ch,30vw);
+  opacity:calc((var(--hp, 0) - .34) * 5);
+  transform:translateY(calc((1 - clamp(0, (var(--hp, 0) - .34) * 5, 1)) * 16px));
+}
+.hero__query-q{
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.2em;
+  color:var(--ink-dim); text-transform:uppercase;
+  padding-bottom:10px; border-bottom:1px solid var(--line);
+}
+.hero__query-list{ margin-top:6px; }
+.hero__query-list li{ position:relative; }
+.hero__query-list a{
+  display:flex; align-items:center; gap:10px;
+  padding:5px 0;
+  font-size:clamp(12.5px,.96vw,14.5px);
+  color:var(--ink-2);
+  transition:color .35s var(--ease), padding-left .45s var(--ease);
+}
+.hero__query-list a::before{
+  content:''; width:0; height:1px; background:var(--cyan);
+  transition:width .45s var(--ease);
+}
+.hero__query-list a:hover{ color:var(--ink); padding-left:4px; }
+.hero__query-list a:hover::before{ width:16px; }
+
+.hero__actions{
+  display:flex; align-items:center; gap:clamp(10px,1.4vw,20px);
+  margin-top:clamp(16px,2.4vh,30px); flex-wrap:wrap;
+}
+
+/* ---------- HUD：压成一条仪器带 ---------- */
+.hero__hud{
+  position:absolute; left:var(--gutter); right:var(--gutter);
+  bottom:clamp(18px,3.4vh,38px); z-index:4;
+  display:flex; gap:clamp(16px,2.6vw,40px);
+  padding-top:10px;
+  border-top:1px solid rgba(241,238,229,.10);
+  width:auto; max-width:none; margin:0;
+  font-size:10px;
+}
+.hero__hud .hud__cell{
+  border-top:0; padding-top:0; flex:0 0 auto;
+  display:flex; align-items:baseline; gap:8px;
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.1em;
+  color:var(--ink-dim); white-space:nowrap;
+}
+.hero__hud .hud__cell i{
+  width:auto; font-size:8px; letter-spacing:.22em; color:var(--ink-faint);
+}
+.hero__hud .hud__ok{ color:var(--cyan); }
+.hero__hud .hud__cell--sonar{ margin-left:auto; }
+
+/* ---------- 滚动标记 ---------- */
+.hero__scroll{
+  position:absolute; right:var(--gutter); bottom:calc(clamp(18px,3.4vh,38px) + 44px);
+  z-index:5; width:auto; aspect-ratio:auto;
+  display:flex; align-items:center; gap:10px;
+  font-family:var(--font-mono); font-size:8.5px; letter-spacing:.24em;
+  color:var(--ink-faint); text-transform:uppercase;
+}
+.hero__scroll-line{
+  position:relative; display:block; width:1px; height:52px;
+  background:linear-gradient(180deg, rgba(241,238,229,.05), rgba(241,238,229,.34));
+  overflow:hidden;
+}
+.hero__scroll-line i{
+  position:absolute; left:0; top:-40%; width:1px; height:40%;
+  background:var(--cyan);
+  animation:scrollDot 2.2s var(--ease-io) infinite;
+}
+@keyframes scrollDot{
+  0%{ top:-40%; opacity:0; }
+  25%{ opacity:1; }
+  100%{ top:100%; opacity:0; }
+}
+
+/* ---------- 移动端 ---------- */
+@media (max-width: 860px){
+  .hero{ height:160svh; }
+  .hero__type{ width:auto; right:var(--gutter); bottom:auto; top:52vh; }
+  .hero__latin{ letter-spacing:.24em; }
+  .hero__query{ width:auto; right:var(--gutter); bottom:calc(13vh + 40px); }
+  .hero__query-list{ display:none; }
+  .hero__hud .hud__cell:nth-child(n+3){ display:none; }
+  .hero__scroll{ display:none; }
+  .atnav{ top:clamp(46px,6vh,70px); }
+}
+@media (max-height: 560px){
+  .hero__query{ display:none; }
+}
+
+/* ---------- 无障碍 / 降级 ---------- */
+@media (prefers-reduced-motion: reduce){
+  .hero__drag-dot, .hero__scroll-line i, .hero__ring svg{ animation:none; }
+  .hero__type, .atnav, .hero__drag{ transition:none; }
+  .hero__query{ opacity:1; transform:none; }
+}
